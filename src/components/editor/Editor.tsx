@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Button, cx, Dialog, ErrorState, Spinner, Tabs, toast } from "@/components/ui";
 import { LoadingBlock } from "@/components/app/common";
-import { IconBack, IconDownload, IconHistory, IconMenu, IconRedo, IconUndo } from "@/components/app/icons";
+import { IconBack, IconDownload, IconHistory, IconMenu, IconRedo, IconShare, IconUndo } from "@/components/app/icons";
+import { SharePanel } from "@/components/campaign/SharePanel";
 import type { CampaignItem, RenderBrand, RenderCampaign } from "@/domain/campaign";
 import { FORMAT_IDS, FORMATS, type FormatId } from "@/domain/formats";
 import { validateOffer } from "@/domain/offer";
@@ -48,7 +49,7 @@ const FALLBACK_BRAND: RenderBrand = {
 };
 
 /** Carrega a campanha e entrega ao editor só quando os dados estão prontos. */
-export function EditorLoader({ id, initialTab }: { id: string; initialTab?: string }) {
+export function EditorLoader({ id, initialTab, storefrontBase }: { id: string; initialTab?: string; storefrontBase: string }) {
   const [state, setState] = useState<EditorState | null>(null);
   const [render, setRender] = useState<RenderCampaign | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -70,10 +71,10 @@ export function EditorLoader({ id, initialTab }: { id: string; initialTab?: stri
     </div>
   );
   if (!state) return <div className="flex min-h-dvh items-center justify-center"><LoadingBlock label="Abrindo o editor…" /></div>;
-  return <Editor key={state.campaign.id} initial={state} renderData={render} initialTab={initialTab} />;
+  return <Editor key={state.campaign.id} initial={state} renderData={render} initialTab={initialTab} storefrontBase={storefrontBase} />;
 }
 
-function Editor({ initial, renderData, initialTab }: { initial: EditorState; renderData: RenderCampaign | null; initialTab?: string }) {
+function Editor({ initial, renderData, initialTab, storefrontBase }: { initial: EditorState; renderData: RenderCampaign | null; initialTab?: string; storefrontBase: string }) {
   const router = useRouter();
   const { me, can } = useMe();
   const id = initial.campaign.id;
@@ -91,7 +92,7 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
   const [sideTab, setSideTab] = useState<SideTab>("campanha");
   const [overflow, setOverflow] = useState<LayoutWarning[]>([]);
   const [showAll, setShowAll] = useState(false);
-  const [dlg, setDlg] = useState<null | "add" | "template" | "versions" | "export" | "menu" | "item">(null);
+  const [dlg, setDlg] = useState<null | "add" | "template" | "versions" | "export" | "menu" | "item" | "share">(initialTab === "divulgar" ? "share" : null);
   const [addSel, setAddSel] = useState<Product[]>([]);
   const [conflict, setConflict] = useState(false);
   const [draft, setDraft] = useState<DraftRecord | null>(null);
@@ -317,6 +318,7 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
           <button type="button" onClick={history.redo} disabled={!history.canRedo} aria-label="Refazer (Ctrl+Shift+Z)" title="Refazer (Ctrl+Shift+Z)" className="rounded-lg p-2 hover:bg-ink/5 disabled:opacity-30"><IconRedo size={20} /></button>
         </>}
         <button type="button" onClick={() => setDlg("versions")} aria-label="Histórico de versões" title="Histórico de versões" className="hidden rounded-lg p-2 hover:bg-ink/5 sm:block"><IconHistory size={20} /></button>
+        <Button size="sm" variant="secondary" icon={<IconShare size={16} />} onClick={() => setDlg("share")} className="hidden sm:inline-flex">Divulgar</Button>
         {can("exports.create") && <Button size="sm" icon={<IconDownload size={16} />} onClick={() => setDlg("export")} className="hidden sm:inline-flex">Exportar</Button>}
         <button type="button" onClick={() => setDlg("menu")} aria-label="Mais ações" className="rounded-lg p-2 hover:bg-ink/5 sm:hidden"><IconMenu size={20} /></button>
       </div>
@@ -390,10 +392,14 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
       </Dialog>
       <Dialog open={dlg === "menu"} onClose={() => setDlg(null)} title="Ações" size="sm">
         <div className="flex flex-col gap-2">
+          <Button variant="secondary" icon={<IconShare size={18} />} onClick={() => setDlg("share")}>Divulgar: link e QR code</Button>
           <Button variant="secondary" icon={<IconHistory size={18} />} onClick={() => setDlg("versions")}>Histórico de versões</Button>
           {can("campaigns.write") && <Button variant="secondary" onClick={() => { setDlg(null); void duplicate(); }}>Duplicar campanha</Button>}
           {can("campaigns.write") && <Button variant="secondary" onClick={() => setDlg("template")}>Trocar modelo</Button>}
         </div>
+      </Dialog>
+      <Dialog open={dlg === "share"} onClose={() => setDlg(null)} title="Divulgar campanha" size="lg">
+        {dlg === "share" && <SharePanel campaignId={id} storefrontBase={storefrontBase} />}
       </Dialog>
       <VersionsDrawer open={dlg === "versions"} onClose={() => setDlg(null)} campaignId={id} currentVersion={server.version} canRestore={can("campaigns.write")}
         beforeRestore={flushOrThrow} onRestored={reload} />
