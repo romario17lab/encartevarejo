@@ -1,6 +1,7 @@
 // Seed: planos, calendário comercial global (2026 e 2027) e conta de DEMONSTRAÇÃO.
 // Uso: npm run db:seed  (DATABASE_URL obrigatório). A senha da conta demo é gerada a cada execução
 // e exibida apenas no terminal — não é gravada em nenhum outro lugar.
+// Em produção: npm run db:seed -- --producao  (só planos e calendário, sem conta de demonstração).
 import { and, eq, isNull, like, sql } from "drizzle-orm";
 import { getDb, getPool, schema } from "./index";
 import { ensurePlans } from "../services/plans";
@@ -131,6 +132,11 @@ async function seedDemo(): Promise<string> {
 async function main() {
   await ensurePlans();
   await seedCalendar();
+  if (process.argv.includes("--producao")) {
+    console.log("Seed de produção concluído: planos e calendário 2026/2027 (sem conta de demonstração).");
+    await getPool().end();
+    return;
+  }
   const password = await seedDemo();
   // assinatura manual e ativa para a conta de demonstração (Etapa 4)
   const demoOrgs = await getDb().select({ id: schema.organizations.id }).from(schema.organizations).where(and(eq(schema.organizations.isDemo, true), eq(schema.organizations.name, DEMO_ORG_NAME)));

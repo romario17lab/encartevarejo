@@ -4,9 +4,9 @@ Plataforma SaaS para supermercados, hortifrútis, açougues, padarias e mercadin
 
 O nome da marca é configurável por `NEXT_PUBLIC_BRAND_NAME`.
 
-## Estado atual (Etapa 2 — núcleo funcional)
+## Estado atual (Etapas 1 a 5 concluídas)
 
-Funciona de ponta a ponta: cadastro → loja e identidade visual → catálogo → campanha (modo rápido e editor) → salvamento automático e versões → aprovação → exportação PNG/JPEG/PDF e pacote ZIP.
+Funciona de ponta a ponta: cadastro → loja e identidade visual → catálogo → campanha (modo rápido e editor) → salvamento automático e versões → aprovação → exportação PNG/JPEG/PDF e pacote ZIP → vitrine, divulgação, vídeos e TV.
 
 | Área | O que existe |
 |---|---|
@@ -17,8 +17,19 @@ Funciona de ponta a ponta: cadastro → loja e identidade visual → catálogo �
 | Aprovação | Rascunho → em revisão → aprovada → agendada → publicada → encerrada. Mudança de produto/preço/condição/data após aprovação exige nova aprovação. Publicação agendada e encerramento rodam no servidor (worker) |
 | Modelos | 12 modelos originais e editáveis (supermercado, hortifrúti, açougue, padaria, bebidas, varejo, sazonais), cada um em 9 formatos, com versão fixada por campanha |
 | Exportação | PNG/JPEG (300 dpi nos impressos), PDF no tamanho físico (com sangria opcional), pacote ZIP por canal com LEIA-ME, fila com novas tentativas e status |
+| Publicação | Vitrine pública por loja (`/loja/<endereço>`) com ofertas por categoria, busca, validade, QR code, lista de interesse para o WhatsApp e pausa de oferta esgotada; campanhas vencidas somem sozinhas; painel Divulgar com link, QR e origem dos acessos |
+| Calendário e métricas | Calendário de campanhas com datas comerciais 2026/2027 editáveis (datas móveis calculadas por ano); visualizações da vitrine, cliques no WhatsApp, campanhas e exportações por origem (sem apresentar cliques como vendas) |
+| Planos e cobrança | Planos Inicial, Profissional e Redes e Agências com limites configuráveis (lojas, usuários, armazenamento, exportações, IA, vídeo, recursos); cobrança via Stripe **somente em modo de testes**, com webhooks validados e idempotentes, renovação, falha com carência, cancelamento e reembolso; sem Stripe, o plano é ajustado pela administração |
+| Administração | Área `/admin` exclusiva: modelos e versões, planos e limites, falhas de exportação, consumo, eventos de assinatura, contas (suspender/reativar) com registro de ações |
+| Filiais e equipe | Preços por filial, duplicação para várias filiais com prévia das diferenças, equipe e convites, histórico |
+| Vídeos | MP4 vertical e horizontal a partir da campanha, modelos animados, duração ajustável, prévia, fila com status e recuperação; narração opcional (precisa de chave) |
+| TV da loja | Player por link ou código de pareamento, playlist, agendamento, atualização remota e funcionamento com conexão instável |
+| Modo agência | Várias contas de clientes com identidades e materiais separados, prévia para aprovação por link com validade, sem acesso cruzado; **a agência paga** (os clientes usam o plano dela e contam no limite de lojas) |
+| Integrações | API v1 com tokens por conta, perfis de importação de planilhas de sistemas de gestão ([docs/06-integracoes.md](docs/06-integracoes.md)); importação manual continua disponível |
+| IA assistida | Extração de listas (texto, foto, PDF), remoção de fundo, sugestões de textos e campanhas, organização de produtos; sempre com revisão humana, consumo por créditos do plano, preços nunca alterados pela IA (precisa de chaves) |
+| Página comercial | Landing e páginas de conteúdo para busca, com sitemap, metadados e exemplos reais gerados pelo próprio sistema |
 
-Ainda não implementado (etapas seguintes): vitrine pública com página própria (os dados e a regra de publicação já existem no servidor), compartilhamento/métricas, calendário visual, cobrança, painel da plataforma, vídeos, IA, TV e modo agência. Ver "Pendências".
+Recursos que dependem de contas externas (Stripe, IA, remoção de fundo, narração, SMTP) aparecem como "não configurado" até as chaves serem cadastradas no servidor, e a alternativa manual continua funcionando. Validação: [docs/05-validacao.md](docs/05-validacao.md).
 
 ## Stack
 
@@ -58,17 +69,11 @@ npm run test:e2e              # Playwright (veja playwright.config.ts para a URL
 
 Ver [.env.example](.env.example). Nunca coloque segredos no repositório. `APP_SECRET` assina sessões, URLs privadas de imagens e tokens de renderização: gere com `openssl rand -hex 32`.
 
-## Hospedagem (sugestão para a primeira versão)
+## Hospedagem
 
-Nada foi publicado. Para colocar no ar:
+Nada foi publicado nem contratado. O guia completo, com a opção recomendada (Railway), o custo mensal estimado e o passo a passo, está em [docs/07-hospedagem.md](docs/07-hospedagem.md).
 
-1. **Banco**: PostgreSQL gerenciado (ex.: Neon, Supabase, RDS) com backup diário automático e retenção de pelo menos 7 dias.
-2. **Aplicação**: um servidor/container Node 22 rodando `npm run build && npm start` e outro processo `npm run worker` no mesmo ambiente (ex.: Railway, Render, Fly.io ou VPS com Docker). O worker precisa do Chromium instalado e de `RENDER_BASE_URL` apontando para a aplicação.
-3. **Arquivos**: hoje em disco (`STORAGE_DIR`). Em produção use volume persistente ou troque o adaptador em `src/server/storage.ts` por um S3 compatível (Cloudflare R2, S3, B2), mantendo os arquivos privados.
-4. **Proxy/HTTPS**: atrás de um proxy confiável, defina `TRUST_PROXY=1` e `APP_URL` com https (o cookie de sessão passa a ser `Secure`).
-5. **E-mail**: configure `SMTP_URL` e `EMAIL_FROM`.
-
-Serviços pagos só devem ser contratados com autorização do responsável.
+Resumo técnico: o `Dockerfile` gera uma imagem única com a aplicação web, o worker, Chromium e ffmpeg; `scripts/start-production.sh` confere as variáveis obrigatórias, aplica as migrações, cadastra planos e calendário (`npm run db:seed -- --producao`, sem conta de demonstração) e sobe a aplicação e o worker juntos. Basta um PostgreSQL e um volume persistente montado em `/data`.
 
 ## Cobrança
 
@@ -164,9 +169,27 @@ docs/             pesquisa, arquitetura, design e validação
 
 ## Pendências e dependências externas
 
-- Vitrine pública (página, QR code, lista de interesse para WhatsApp), métricas e compartilhamento: Etapa 3.
-- Cobrança: integração com o Stripe em modo de testes pronta, sem credenciais configuradas (veja Cobrança). Cobrança real exige autorização do dono, chaves de produção e revisão.
-- Envio de e-mail real: exige SMTP.
-- Vídeos, IA (extração de listas, remoção de fundo), TV e modo agência: Etapa 5; IA e narração dependem de serviços contratados.
-- Busca por código de barras: exige uma fonte de dados real integrada.
-- Conversão CMYK para gráficas não é feita; os arquivos são RGB e isso é informado no pacote.
+Dependem de decisão ou conta do dono:
+
+- **Hospedagem**: criar a conta e autorizar a publicação ([docs/07-hospedagem.md](docs/07-hospedagem.md)). Depois, dar acesso de administração da plataforma com `npm run admin:grant -- <email>`.
+- **Valores dos planos**: ainda "a definir"; são cadastrados na administração (`/admin`).
+- **Cobrança real**: hoje só modo de testes. Precisa de conta Stripe, um preço mensal por plano e, para cobrar de verdade, autorização expressa, chaves de produção e `BILLING_ALLOW_LIVE=1`.
+- **E-mail**: conta de envio (SMTP), sem a qual recuperação de senha e convites não chegam em produção.
+- **Serviços opcionais**: chave da Anthropic (IA), remove.bg (remoção de fundo) e Google Text-to-Speech (narração). Sem elas, os recursos aparecem como "não configurado".
+- **Textos legais**: termos de uso e política de privacidade (LGPD) não fazem parte deste código.
+
+Limitações conhecidas:
+
+- Busca de produto por código de barras exige uma fonte de dados real; hoje o código de barras é só um campo do cadastro e da API.
+- Arquivos para gráfica saem em RGB, sem conversão CMYK, e isso é informado no pacote.
+- Publicação automática em redes sociais e envio em massa no WhatsApp não existem: dependem de APIs oficiais e autorização.
+- Arquivos ficam em disco (volume). Para várias instâncias da aplicação, trocar o adaptador de `src/server/storage.ts` por S3 compatível.
+- Os serviços externos (Stripe, Anthropic, remove.bg, Google) foram testados com simulações automáticas, não com contas reais.
+
+## Próxima etapa priorizada
+
+1. Publicar uma prévia privada na hospedagem recomendada, com Stripe em modo de testes e SMTP, e testar com 1 ou 2 lojas reais.
+2. Definir os valores dos planos e os limites de IA e vídeo com base no consumo medido nessa prévia.
+3. Termos de uso, política de privacidade e página de contato.
+4. Ativar a cobrança real, com autorização do dono.
+5. Melhorias a partir do uso: busca por código de barras com fonte autorizada, armazenamento S3, publicação em redes sociais por API oficial.

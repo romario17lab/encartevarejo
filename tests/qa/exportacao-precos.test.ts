@@ -24,6 +24,25 @@ const log: string[] = [];
 const mainCents = (o: Offer) => (o.mode === "combo" ? o.comboCents : o.mode === "club" ? o.clubCents : o.priceCents)!;
 const mainText = (o: Offer) => formatBRL(mainCents(o)).replace(/\s+/g, ""); // "R$59,90"
 
+interface PdfWord { page: number; x0: number; y0: number; x1: number; y1: number; t: string }
+/** Palavras do PDF com a caixa de cada uma (pdftotext -bbox). */
+function pdfWords(file: string): PdfWord[] {
+  const html = execFileSync("pdftotext", ["-bbox", file, "-"]).toString();
+  const out: PdfWord[] = [];
+  let page = 0;
+  for (const m of html.matchAll(/<page |<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g)) {
+    if (m[0].startsWith("<page")) { page++; continue; }
+    out.push({ page, x0: +m[1]!, y0: +m[2]!, x1: +m[3]!, y1: +m[4]!, t: m[5]!.replace(/&amp;/g, "&") });
+  }
+  return out;
+}
+/** "reais,cc" inteiro, ou "reais" seguido imediatamente (à direita, mesma faixa vertical) de ",cc". */
+function pdfHasPrice(words: PdfWord[], reais: string, cc: string): boolean {
+  if (words.some((w) => w.t.replace(/^R\$/, "") === `${reais},${cc}`)) return true;
+  return words.some((a) => a.t === reais && words.some((b) =>
+    b.page === a.page && b.t === `,${cc}` && b.x0 >= a.x1 - 2 && b.x0 - a.x1 < a.y1 - a.y0 && b.y0 < a.y1 && b.y1 > a.y0));
+}
+
 beforeAll(async () => {
   browser = await launch();
   A = await signup("Export");
@@ -97,12 +116,15 @@ describe("exportação e preços", () => {
           expect(Math.abs(mm(h!) - spec.physical!.heightMm), n).toBeLessThan(1);
           const r = await inspect(browser, cid, A.orgId, version, f);
           expect(pages, n).toBe(r.pages);
-          // texto do PDF contém todos os preços dos itens daquela peça
-          // texto do PDF (posicionamento absoluto: reais e centavos saem em linhas separadas)
-          const lines = new Set(execFileSync("pdftotext", [local, "-"]).toString().split(/\n/).map((l) => l.trim()));
+          // texto do PDF contém todos os preços dos itens daquela peça. Os modelos usam posicionamento
+          // absoluto e reais/centavos em tamanhos diferentes, então o fluxo de texto do pdftotext pode juntar
+          // os reais a palavras vizinhas (ex.: "2 TA"). Por isso usamos as caixas das palavras (-bbox):
+          // o preço conta como presente quando aparece inteiro ("2,29") ou quando os reais ("2") estão
+          // imediatamente à esquerda dos centavos (",29") na mesma faixa vertical da mesma página.
+          const words = pdfWords(local);
           for (const cell of r.cells) {
             const [reais, cc] = mainText(stored.get(cell.id)!.offer).replace("R$", "").split(",");
-            expect(lines.has(`${reais},${cc}`) || (lines.has(reais!) && lines.has(`,${cc}`)), `${n} ${stored.get(cell.id)!.name}: ${reais},${cc}`).toBe(true);
+            expect(pdfHasPrice(words, reais!, cc!), `${n} ${stored.get(cell.id)!.name}: ${reais},${cc}`).toBe(true);
           }
           log.push(`${n}: ${pages} página(s), ${mm(w!).toFixed(1)}×${mm(h!).toFixed(1)} mm, ${r.cells.length} preços no texto do PDF`);
           execFileSync("pdftoppm", ["-png", "-r", "60", "-f", "1", "-l", "1", local, local.replace(/\.pdf$/, "_raster")]);
