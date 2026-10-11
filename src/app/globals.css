@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ev-brand: 22 101 52;        /* verde feira */
+  --ev-brand-strong: 20 83 45;
+  --ev-brand-soft: 220 252 231;
+  --ev-accent: 234 88 12;       /* laranja oferta */
+  --ev-ink: 17 24 39;
+  --ev-ink-muted: 75 85 99;
+  --ev-surface: 255 255 255;
+  --ev-surface-alt: 248 250 247;
+  --ev-line: 229 231 235;
+  --ev-success: 22 163 74;
+  --ev-warning: 202 138 4;
+  --ev-danger: 220 38 38;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body { @apply bg-surface-alt text-ink antialiased; }
+:focus-visible { outline: 3px solid rgb(var(--ev-accent)); outline-offset: 2px; }
