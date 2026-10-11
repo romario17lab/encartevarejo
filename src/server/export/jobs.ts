@@ -1,5 +1,5 @@
 // Serviço de pedidos de exportação (API). Isolado por conta: toda consulta filtra por ctx.orgId.
-import { and, desc, eq, gte, count } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/server/db";
 import type { TenantCtx } from "@/server/context";
@@ -10,6 +10,7 @@ import { writeAudit } from "@/server/audit";
 import { FORMATS, type FormatId } from "@/domain/formats";
 import { getTemplate } from "@/templates/registry";
 import { loadRenderBundle } from "@/server/services/render-data";
+import { assertUsage } from "@/server/services/plans";
 import { defaultPackageItems, runExportJob, type ExportRequest } from "./run";
 
 const FILE_LABEL = { png: "PNG", jpeg: "JPEG", pdf: "PDF" } as const;
@@ -51,17 +52,9 @@ async function fileNameOf(job: JobRow): Promise<string | null> {
   return a?.name ?? null;
 }
 
+/** Limite de exportações por mês do plano (contagem de pedidos no mês, horário de Brasília). */
 async function assertMonthlyLimit(orgId: string) {
-  const db = getDb();
-  const [org] = await db.select({ limits: schema.plans.limits, name: schema.plans.name }).from(schema.organizations)
-    .innerJoin(schema.plans, eq(schema.plans.id, schema.organizations.planId)).where(eq(schema.organizations.id, orgId));
-  const limit = org?.limits?.exportsPerMonth;
-  if (!limit) return;
-  const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const [{ n }] = await db.select({ n: count() }).from(schema.exportJobs)
-    .where(and(eq(schema.exportJobs.orgId, orgId), gte(schema.exportJobs.createdAt, monthStart)));
-  if (n >= limit) throw new AppError("limit_reached", `O plano ${org!.name} permite ${limit} exportações por mês. O limite deste mês foi atingido.`);
+  await assertUsage(orgId, "exports", 1);
 }
 
 /** Cria o pedido fixado na versão ATUAL da campanha e enfileira (ou executa em processo com EXPORT_INLINE=1). */

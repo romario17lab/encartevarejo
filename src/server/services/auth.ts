@@ -14,6 +14,7 @@ import { hitRateLimit, resetRateLimit } from "../auth/rate-limit";
 import { createSession, findMembership, firstOrgOf } from "../auth/session";
 import { insertBrandKit } from "./brand-kits";
 import { insertStore, storeInputSchema } from "./stores";
+import { createTrialSubscription } from "./subscriptions";
 
 export const emailSchema = z.string().trim().toLowerCase().pipe(z.email("Informe um e-mail válido.")).pipe(z.string().max(160));
 export const passwordSchema = z.string().min(PASSWORD_MIN, `A senha precisa ter pelo menos ${PASSWORD_MIN} caracteres.`).max(200, "Senha longa demais.");
@@ -50,6 +51,7 @@ export async function signup(raw: unknown, meta: { userAgent?: string | null } =
     const bk = await insertBrandKit(orgId, input.orgName, tx);
     const store = await insertStore(orgId, storeInputSchema.parse({ name: input.storeName, segment: input.segment, brandKitId: bk.id }), tx);
     await tx.insert(schema.memberships).values({ orgId, userId, role: "admin" });
+    await createTrialSubscription(orgId, "inicial", tx); // Etapa 4: conta nova começa em período de teste
     await writeAudit(tx, { orgId, userId, action: "org.create", entityType: "organization", entityId: orgId, summary: `Conta "${input.orgName}" criada por ${input.name}.` });
     return { userId, orgId, storeId: store.id };
   });

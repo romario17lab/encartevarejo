@@ -39,6 +39,27 @@ async function adminCount(orgId: string, db: Executor) {
   return rows.length;
 }
 
+/** Administradores com acesso a todas as lojas (store_ids nulo). A conta precisa manter ao menos um. */
+async function fullAccessAdmins(orgId: string, db: Executor) {
+  const rows = await db.select({ userId: schema.memberships.userId }).from(schema.memberships)
+    .where(and(eq(schema.memberships.orgId, orgId), eq(schema.memberships.role, "admin"), isNull(schema.memberships.storeIds)));
+  return rows.map((r) => r.userId);
+}
+
+async function memberName(userId: string, db: Executor) {
+  const [u] = await db.select({ name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, userId));
+  return u?.name || u?.email || "membro";
+}
+
+async function storeNames(orgId: string, ids: string[], db: Executor) {
+  if (!ids.length) return [];
+  const rows = await db.select({ id: schema.stores.id, name: schema.stores.name }).from(schema.stores).where(and(eq(schema.stores.orgId, orgId), inArray(schema.stores.id, ids)));
+  return rows.map((r) => r.name).sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+const LAST_ADMIN = "A conta precisa ter pelo menos um administrador.";
+const LAST_FULL_ADMIN = "A conta precisa ter pelo menos um administrador com acesso a todas as lojas.";
+
 const memberPatch = z.object({
   role: z.enum(ROLES).optional(),
   storeIds: z.array(z.string()).max(100).nullable().optional(),
@@ -49,17 +70,33 @@ export async function updateMember(ctx: TenantCtx, userId: string, raw: unknown)
   const input = memberPatch.parse(raw);
   const db = getDb();
   return db.transaction(async (tx) => {
-    const [m] = await tx.select().from(schema.memberships).where(and(eq(schema.memberships.orgId, ctx.orgId), eq(schema.memberships.userId, userId))).for("update");
+    // trava os vínculos da conta para que duas alterações simultâneas não deixem a conta sem administrador
+    const all = await tx.select().from(schema.memberships).where(eq(schema.memberships.orgId, ctx.orgId)).for("update");
+    const m = all.find((x) => x.userId === userId);
     if (!m) throw notFound("Membro");
     if (input.role && input.role !== "admin" && m.role === "admin" && (await adminCount(ctx.orgId, tx)) <= 1)
-      throw new AppError("validation", "A conta precisa ter pelo menos um administrador.");
+      throw new AppError("validation", LAST_ADMIN);
     await assertStoresInOrg(ctx.orgId, input.storeIds, tx);
     const patch: Partial<typeof schema.memberships.$inferInsert> = {};
-    if (input.role) patch.role = input.role;
+    if (input.role && input.role !== m.role) patch.role = input.role;
     if (input.storeIds !== undefined) patch.storeIds = input.storeIds && input.storeIds.length ? [...new Set(input.storeIds)] : null;
-    if (Object.keys(patch).length) await tx.update(schema.memberships).set(patch).where(and(eq(schema.memberships.orgId, ctx.orgId), eq(schema.memberships.userId, userId)));
+    const nextRole = patch.role ?? m.role;
+    const nextStores = patch.storeIds !== undefined ? patch.storeIds : m.storeIds;
+    if (m.role === "admin" && m.storeIds === null && !(nextRole === "admin" && nextStores === null)) {
+      const others = (await fullAccessAdmins(ctx.orgId, tx)).filter((id) => id !== userId);
+      if (!others.length) throw new AppError("validation", LAST_FULL_ADMIN);
+    }
+    if (!Object.keys(patch).length) return { ok: true };
+    await tx.update(schema.memberships).set(patch).where(and(eq(schema.memberships.orgId, ctx.orgId), eq(schema.memberships.userId, userId)));
+    const name = await memberName(userId, tx);
+    const parts: string[] = [];
+    if (patch.role) parts.push(`papel de ${name} alterado de ${ROLE_LABEL[m.role]} para ${ROLE_LABEL[patch.role]}`);
+    if (patch.storeIds !== undefined) {
+      parts.push(patch.storeIds === null ? `${name} agora acessa todas as lojas` : `acesso de ${name} limitado a: ${(await storeNames(ctx.orgId, patch.storeIds, tx)).join(", ")}`);
+    }
+    const summary = parts.join("; ");
     await writeAudit(tx, { orgId: ctx.orgId, userId: ctx.userId, action: "member.update", entityType: "member", entityId: userId,
-      summary: input.role ? `Papel de membro alterado para ${ROLE_LABEL[input.role]}.` : "Lojas de acesso de um membro alteradas.", data: { role: input.role, storeIds: input.storeIds } });
+      summary: summary.charAt(0).toUpperCase() + summary.slice(1) + ".", data: { role: patch.role, previousRole: patch.role ? m.role : undefined, storeIds: patch.storeIds } });
     return { ok: true };
   });
 }
@@ -68,13 +105,17 @@ export async function removeMember(ctx: TenantCtx, userId: string) {
   requirePermission(ctx, "members.manage");
   const db = getDb();
   return db.transaction(async (tx) => {
-    const [m] = await tx.select().from(schema.memberships).where(and(eq(schema.memberships.orgId, ctx.orgId), eq(schema.memberships.userId, userId))).for("update");
+    const all = await tx.select().from(schema.memberships).where(eq(schema.memberships.orgId, ctx.orgId)).for("update");
+    const m = all.find((x) => x.userId === userId);
     if (!m) throw notFound("Membro");
-    if (m.role === "admin" && (await adminCount(ctx.orgId, tx)) <= 1) throw new AppError("validation", "A conta precisa ter pelo menos um administrador.");
+    if (m.role === "admin" && (await adminCount(ctx.orgId, tx)) <= 1) throw new AppError("validation", LAST_ADMIN);
+    if (m.role === "admin" && m.storeIds === null && !(await fullAccessAdmins(ctx.orgId, tx)).some((id) => id !== userId))
+      throw new AppError("validation", LAST_FULL_ADMIN);
+    const name = await memberName(userId, tx);
     await tx.delete(schema.memberships).where(and(eq(schema.memberships.orgId, ctx.orgId), eq(schema.memberships.userId, userId)));
     // sessões desse usuário que estavam nesta conta perdem a conta ativa
     await tx.update(schema.sessions).set({ activeOrgId: null }).where(and(eq(schema.sessions.userId, userId), eq(schema.sessions.activeOrgId, ctx.orgId)));
-    await writeAudit(tx, { orgId: ctx.orgId, userId: ctx.userId, action: "member.remove", entityType: "member", entityId: userId, summary: "Membro removido da conta." });
+    await writeAudit(tx, { orgId: ctx.orgId, userId: ctx.userId, action: "member.remove", entityType: "member", entityId: userId, summary: `${name} (${ROLE_LABEL[m.role]}) removido(a) da conta.` });
     return { ok: true };
   });
 }
@@ -85,7 +126,9 @@ export async function listInvitations(ctx: TenantCtx) {
   const rows = await getDb().select({
     id: schema.invitations.id, email: schema.invitations.email, role: schema.invitations.role, expiresAt: schema.invitations.expiresAt,
     acceptedAt: schema.invitations.acceptedAt, revokedAt: schema.invitations.revokedAt, createdAt: schema.invitations.createdAt, invitedBy: schema.invitations.invitedBy,
-  }).from(schema.invitations).where(eq(schema.invitations.orgId, ctx.orgId)).orderBy(desc(schema.invitations.createdAt));
+    invitedByName: schema.users.name,
+  }).from(schema.invitations).leftJoin(schema.users, eq(schema.users.id, schema.invitations.invitedBy))
+    .where(eq(schema.invitations.orgId, ctx.orgId)).orderBy(desc(schema.invitations.createdAt));
   const now = Date.now();
   return rows.map((r) => ({ ...r, status: r.acceptedAt ? "aceito" : r.revokedAt ? "cancelado" : r.expiresAt.getTime() < now ? "expirado" : "pendente" }));
 }
@@ -129,6 +172,37 @@ export async function revokeInvitation(ctx: TenantCtx, id: string) {
   if (!row) throw notFound("Convite");
   await writeAudit(db, { orgId: ctx.orgId, userId: ctx.userId, action: "member.invite_revoke", entityType: "invitation", entityId: id, summary: `Convite para ${row.email} cancelado.` });
   return { ok: true };
+}
+
+/**
+ * Reenvia um convite pendente ou expirado: gera um novo link (o anterior deixa de valer) e renova a validade.
+ * Convite aceito ou cancelado não pode ser reenviado (crie um novo).
+ */
+export async function resendInvitation(ctx: TenantCtx, id: string) {
+  requirePermission(ctx, "members.manage");
+  const db = getDb();
+  const token = randomToken(32);
+  const res = await db.transaction(async (tx) => {
+    await tx.select({ id: schema.organizations.id }).from(schema.organizations).where(eq(schema.organizations.id, ctx.orgId)).for("update");
+    const [inv] = await tx.select().from(schema.invitations).where(and(eq(schema.invitations.id, id), eq(schema.invitations.orgId, ctx.orgId))).for("update");
+    if (!inv) throw notFound("Convite");
+    if (inv.acceptedAt) throw new AppError("validation", "Este convite já foi aceito.");
+    if (inv.revokedAt) throw new AppError("validation", "Este convite foi cancelado. Envie um novo convite.");
+    // convite expirado volta a ocupar uma vaga do plano
+    if (inv.expiresAt.getTime() <= Date.now()) await assertUserLimit(ctx.orgId, tx);
+    const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 3600 * 1000);
+    await tx.update(schema.invitations).set({ tokenHash: sha256(token), expiresAt }).where(eq(schema.invitations.id, id));
+    const [org] = await tx.select({ name: schema.organizations.name }).from(schema.organizations).where(eq(schema.organizations.id, ctx.orgId));
+    const link = appUrl(`/convite?token=${encodeURIComponent(token)}`);
+    await sendEmail({ to: inv.email, kind: "invitation", orgId: ctx.orgId, subject: `Convite para ${org!.name}`,
+      text: `Você foi convidado(a) para participar da conta "${org!.name}" como ${ROLE_LABEL[inv.role]}.\n\nAceite pelo link (válido por ${INVITE_DAYS} dias):\n\n${link}` }, tx);
+    await writeAudit(tx, { orgId: ctx.orgId, userId: ctx.userId, action: "member.invite_resend", entityType: "invitation", entityId: id, summary: `Convite para ${inv.email} reenviado.` });
+    return { inv, link, expiresAt };
+  });
+  return {
+    id, email: res.inv.email, role: res.inv.role, expiresAt: res.expiresAt, status: "pendente",
+    acceptUrl: process.env.SMTP_URL ? null : res.link,
+  };
 }
 
 async function findValidInvitation(token: string, db: Executor) {

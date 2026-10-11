@@ -1,7 +1,9 @@
 import { tenantRoute } from "@/server/http";
 import { qp } from "@/server/route-helpers";
-import { listAudit } from "@/server/services/org";
+import { listHistory } from "@/server/services/history";
 
-export const GET = tenantRoute(async (req, ctx) => listAudit(ctx, {
+/** GET /api/audit?tipo=&loja=&entityType=&entityId=&cursor=&limit= */
+export const GET = tenantRoute(async (req, ctx) => listHistory(ctx, {
+  type: qp(req, "tipo") ?? qp(req, "type"), storeId: qp(req, "loja") ?? qp(req, "storeId"),
   entityType: qp(req, "entityType"), entityId: qp(req, "entityId"), cursor: qp(req, "cursor"), limit: Number(qp(req, "limit") ?? 50) || 50,
 }));

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { Button, Card, Dialog, Input, toast } from "@/components/ui";
 import { PageHeader } from "@/components/app/common";
@@ -39,6 +40,11 @@ export default function AccountPage() {
         <Card>
           <h2 className="font-display font-bold">Seus dados</h2>
           <p className="mt-1 text-sm text-ink-muted">{me.user.name} · {me.user.email}</p>
+        </Card>
+        <Card>
+          <h2 className="font-display font-bold">Plano e cobrança</h2>
+          <p className="mt-1 text-sm text-ink-muted">Veja o plano, a situação da assinatura e o consumo do mês.</p>
+          <Link href="/app/conta/plano" className="mt-3 inline-flex h-11 items-center rounded-xl border border-line-strong/60 bg-surface px-4 text-[15px] font-semibold hover:bg-surface-alt">Ver plano e cobrança</Link>
         </Card>
         {can("org.manage") && (
           <>
