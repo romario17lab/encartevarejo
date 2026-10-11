@@ -22,6 +22,20 @@
       "when": 1791718769641,
       "tag": "0002_etapa4_cobranca_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791722941628,
+      "tag": "0003_etapa5_diferenciais",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791723074688,
+      "tag": "0004_etapa5_recursos_planos",
+      "breakpoints": true
     }
   ]
 }

@@ -60,6 +60,7 @@ async function main() {
 
   await boss.work(SCHEDULER_QUEUE, async () => { await runScheduler(); });
   await boss.schedule(SCHEDULER_QUEUE, "* * * * *");
+  await (await import("./video-worker")).registerVideoWorker(boss); // vídeos de ofertas (fila "video" + recuperação)
 
   console.info(`[worker] pronto: fila "${EXPORT_QUEUE}" (concorrência ${concurrency}), varredura e agendador a cada minuto.`);
 

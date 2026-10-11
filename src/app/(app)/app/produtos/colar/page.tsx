@@ -6,6 +6,7 @@ import { Checkbox, PageHeader } from "@/components/app/common";
 import type { Unit } from "@/domain/offer";
 import { api, type ParsedRow } from "@/lib/client/api";
 import { UNIT_OPTIONS } from "@/lib/client/format";
+import { AiExtractPanel } from "@/components/ai/AiExtractPanel";
 
 type Row = ParsedRow & { selected: boolean; saved?: boolean; error?: string };
 const EXAMPLE = "Arroz Tio João 5kg 24,90\nFeijão carioca 1kg - 7,49\nBanana prata kg 4,99";
@@ -59,6 +60,7 @@ export default function PastePage() {
         <div className="mt-3 flex justify-end"><Button onClick={parse} loading={busy && !rows} disabled={!text.trim()}>Ler lista</Button></div>
       </Card>
       {error && <div className="mt-4"><ErrorState message={error} /></div>}
+      <AiExtractPanel text={text} />
 
       {rows && (
         <Card className="mt-4">

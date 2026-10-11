@@ -6,6 +6,8 @@ export interface Meter { used: number; limit: number }
 export interface BillingOverview {
   provider: { name: "manual" | "stripe"; configured: boolean; testMode: boolean; problem: string | null };
   canManage: boolean;
+  /** conta cliente paga pela agência ("Agência paga") */
+  paidByAgency: { id: string; name: string } | null;
   readOnly: boolean;
   reasons: string[];
   alerts: BillingAlert[];

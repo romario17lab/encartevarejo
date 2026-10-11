@@ -7,6 +7,8 @@ import { IconUpload } from "@/components/app/icons";
 import { parseBRL, formatBRL } from "@/domain/money";
 import { UNITS } from "@/domain/offer";
 import { api, type ImportPreview, type ImportResult } from "@/lib/client/api";
+import { AiExtractShortcut } from "@/components/ai/AiExtractPanel";
+import { ApplyProfileSelect, ProfileQuickRun, ProfilesList, SaveProfileForm, useImportProfiles } from "@/components/integrations/ImportProfiles";
 
 const FIELDS: Array<{ key: string; label: string; required?: boolean; price?: boolean }> = [
   { key: "name", label: "Nome do produto", required: true },
@@ -55,6 +57,9 @@ export default function ImportPage() {
   const [onDuplicate, setOnDuplicate] = useState<"skip" | "update" | "create">("skip");
   const [result, setResult] = useState<ImportResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const profiles = useImportProfiles();
+  const [profileNote, setProfileNote] = useState<string | null>(null);
+  const [usedProfile, setUsedProfile] = useState<string | null>(null);
 
   const upload = async () => {
     if (!file) return;
@@ -117,6 +122,9 @@ export default function ImportPage() {
       </ol>
       {error && <div className="mb-4"><ErrorState message={error} /></div>}
 
+      {step === 0 && profiles.data && (
+        <ProfileQuickRun data={profiles.data} reload={profiles.reload} onResult={(r) => { setUsedProfile(r.profile.name); setResult(r); setStep(3); }} />
+      )}
       {step === 0 && (
         <Card>
           <label htmlFor="import-file" className="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-line p-8 text-center hover:border-brand">
@@ -129,10 +137,21 @@ export default function ImportPage() {
           <div className="mt-4 flex justify-end"><Button onClick={upload} loading={busy} disabled={!file}>Continuar</Button></div>
         </Card>
       )}
+      {step === 0 && <AiExtractShortcut />}
+      {step === 0 && profiles.data && <ProfilesList data={profiles.data} reload={profiles.reload} />}
 
       {step === 1 && preview && (
         <Card>
           <p className="mb-4 text-sm text-ink-muted">Encontramos <strong>{preview.totalRows}</strong> linhas e {preview.columns.length} colunas. Diga qual coluna corresponde a cada campo. Já sugerimos o que conseguimos reconhecer.</p>
+          {profiles.data && (profiles.data.profiles.length > 0 || profiles.data.examples.length > 0) && (
+            <div className="mb-4">
+              <ApplyProfileSelect data={profiles.data} columns={preview.columns} onApply={(m, dup, missing) => {
+                setMapping({ ...Object.fromEntries(FIELDS.map((f) => [f.key, null])), ...m }); setOnDuplicate(dup);
+                setProfileNote(missing.length ? `Estas colunas não existem no arquivo e ficaram sem mapeamento: ${missing.join(", ")}.` : "Colunas aplicadas. Confira antes de continuar.");
+              }} />
+              {profileNote && <p role="status" className="mt-1 text-sm text-ink-muted">{profileNote}</p>}
+            </div>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             {FIELDS.map((f) => (
               <Select key={f.key} label={f.label} required={f.required} value={mapping[f.key] ?? ""}
@@ -197,7 +216,7 @@ export default function ImportPage() {
 
       {step === 3 && result && (
         <Card>
-          <h2 className="font-display text-xl font-bold" role="status">Importação concluída</h2>
+          <h2 className="font-display text-xl font-bold" role="status">Importação concluída{usedProfile ? ` (perfil “${usedProfile}”)` : ""}</h2>
           <dl className="mt-4 grid grid-cols-3 gap-3 text-center">
             <div className="rounded-xl bg-success/10 p-3"><dt className="text-xs text-ink-muted">Criados</dt><dd className="text-2xl font-bold">{result.created}</dd></div>
             <div className="rounded-xl bg-brand-soft p-3"><dt className="text-xs text-ink-muted">Atualizados</dt><dd className="text-2xl font-bold">{result.updated}</dd></div>
@@ -209,6 +228,7 @@ export default function ImportPage() {
               <ul className="mt-2 max-h-60 overflow-auto text-sm">{result.errors.map((e, i) => <li key={i}>Linha {e.row}: {e.message}</li>)}</ul>
             </div>
           )}
+          {!usedProfile && preview && <div className="mt-5"><SaveProfileForm mapping={mapping} onDuplicate={onDuplicate} onSaved={() => void profiles.reload()} /></div>}
           <div className="mt-5 flex flex-col gap-2 sm:flex-row">
             <Link href="/app/produtos?issues=incompleto" className="inline-flex h-11 items-center justify-center rounded-xl bg-brand px-4 font-semibold text-white">Revisar produtos incompletos</Link>
             <Link href="/app/produtos" className="inline-flex h-11 items-center justify-center rounded-xl border border-line px-4 font-semibold">Ver catálogo</Link>

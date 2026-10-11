@@ -23,7 +23,7 @@ import { appUrl } from "../email";
 import { writeAudit } from "../audit";
 import { billingConfig, getBillingProvider, webhookProvider, type BillingProvider, type ProviderName, type ProviderSubscription, type WebhookEvent } from "../billing";
 import { PAYMENT_NOT_ENABLED } from "../billing/manual";
-import { FEATURE_LABEL, listActivePlans, monthlyUsage, orgUsage } from "./plans";
+import { billingGroup, FEATURE_LABEL, listActivePlans, monthlyUsage, orgUsage } from "./plans";
 
 const nano = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 20);
 const subId = () => `sub_${nano()}`;
@@ -131,7 +131,16 @@ function backfill(orgId: string, planId: string): SubRow {
   };
 }
 
+/** Conta cliente de agência: plano e assinatura vêm da agência ("Agência paga"). */
 async function loadOrgAndSub(orgId: string, db: Executor) {
+  const [own] = await db.select({ agencyOrgId: schema.organizations.agencyOrgId, suspendedAt: schema.organizations.suspendedAt, deletedAt: schema.organizations.deletedAt })
+    .from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  if (!own || own.deletedAt) throw new AppError("not_found", "Conta não encontrada.");
+  const r = await loadBillingOrgAndSub(own.agencyOrgId ?? orgId, db);
+  return { ...r, paidByAgency: own.agencyOrgId ? { id: r.org.id, name: r.org.name } : null, ownSuspended: !!own.suspendedAt };
+}
+
+async function loadBillingOrgAndSub(orgId: string, db: Executor) {
   const [row] = await db.select({ org: schema.organizations, plan: schema.plans, sub: schema.subscriptions })
     .from(schema.organizations)
     .innerJoin(schema.plans, eq(schema.plans.id, schema.organizations.planId))
@@ -145,8 +154,8 @@ const paymentEnabled = () => billingConfig().provider !== "manual";
 
 /** Direitos de uso da conta: plano, limites, status efetivo e se está somente leitura (com motivos). */
 export async function entitlements(orgId: string, db: Executor = getDb(), now = new Date()) {
-  const { org, plan, sub, stored } = await loadOrgAndSub(orgId, db);
-  const ev = evaluateSubscription(sub, { now, paymentEnabled: paymentEnabled(), suspended: !!org.suspendedAt });
+  const { org, plan, sub, stored, paidByAgency, ownSuspended } = await loadOrgAndSub(orgId, db);
+  const ev = evaluateSubscription(sub, { now, paymentEnabled: paymentEnabled(), suspended: ownSuspended || !!org.suspendedAt });
   return {
     plan: { id: plan.id, name: plan.name, priceCents: plan.priceCents },
     limits: plan.limits,
@@ -156,17 +165,23 @@ export async function entitlements(orgId: string, db: Executor = getDb(), now = 
     reasons: ev.reasons,
     alerts: ev.alerts,
     subscription: { ...sub, stored },
+    paidByAgency,
   };
 }
 
 /** Lança SubscriptionInactiveError (402, subscription_inactive) quando a conta está somente leitura. */
 export async function assertWritable(orgId: string, db: Executor = getDb()) {
+  const [own] = await db.select({ suspendedAt: schema.organizations.suspendedAt, agencyOrgId: schema.organizations.agencyOrgId })
+    .from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  if (!own) return; // conta inexistente: a própria rota responde
+  // conta cliente de agência segue a assinatura da agência
+  const billingOrgId = own.agencyOrgId ?? orgId;
   const [row] = await db.select({ suspendedAt: schema.organizations.suspendedAt, sub: schema.subscriptions })
     .from(schema.organizations).leftJoin(schema.subscriptions, eq(schema.subscriptions.orgId, schema.organizations.id))
-    .where(eq(schema.organizations.id, orgId));
-  if (!row) return; // conta inexistente: a própria rota responde
-  if (!row.sub && !row.suspendedAt) return; // sem assinatura gravada = manual/ativa
-  const ev = evaluateSubscription(row.sub ?? backfill(orgId, ""), { paymentEnabled: paymentEnabled(), suspended: !!row.suspendedAt });
+    .where(eq(schema.organizations.id, billingOrgId));
+  const suspended = !!own.suspendedAt || !!row?.suspendedAt;
+  if (!row?.sub && !suspended) return; // sem assinatura gravada = manual/ativa
+  const ev = evaluateSubscription(row?.sub ?? backfill(orgId, ""), { paymentEnabled: paymentEnabled(), suspended });
   if (ev.readOnly) {
     throw new SubscriptionInactiveError(`Conta somente leitura. ${ev.reasons[0]} Você ainda pode consultar, exportar os dados da conta e cuidar do plano em Conta › Plano e cobrança.`, { status: ev.status });
   }
@@ -207,7 +222,8 @@ export async function setManualSubscription(orgId: string, raw: unknown, actorUs
   const input = manualUpdateSchema.parse(raw);
   const { graceDays } = billingConfig();
   return getDb().transaction(async (tx) => {
-    const { sub, stored } = await loadOrgAndSub(orgId, tx);
+    const { sub, stored, paidByAgency } = await loadOrgAndSub(orgId, tx);
+    if (paidByAgency) throw new AppError("validation", `Esta conta é paga pela agência "${paidByAgency.name}". Ajuste o plano e a assinatura na conta da agência.`);
     if (input.planId) {
       const [p] = await tx.select({ id: schema.plans.id }).from(schema.plans).where(eq(schema.plans.id, input.planId));
       if (!p) throw new AppError("validation", "Plano inexistente.");
@@ -263,7 +279,8 @@ export async function billingOverview(ctx: TenantCtx) {
       // motivo da recusa da configuração (sem segredos) apenas para quem administra a conta
       problem: canManage ? cfg.stripeProblem : null,
     },
-    canManage,
+    canManage: canManage && !ent.paidByAgency,
+    paidByAgency: ent.paidByAgency,
     readOnly: ent.readOnly,
     reasons: ent.reasons,
     alerts: ent.alerts,
@@ -298,12 +315,19 @@ function requireManage(ctx: TenantCtx) {
   if (!can(ctx.role, "billing.manage")) throw forbidden("Somente administradores da conta podem alterar o plano e a cobrança.");
 }
 
+/** Conta cliente de agência não tem cobrança própria: plano e pagamento são da agência. */
+async function requireOwnBilling(ctx: TenantCtx, db: Executor) {
+  const { billingOrgId } = await billingGroup(ctx.orgId, db);
+  if (billingOrgId !== ctx.orgId) throw new AppError("validation", "Esta conta é paga pela agência que a administra. O plano e o pagamento são cuidados na conta da agência.");
+}
+
 async function logAction(db: Executor, orgId: string, provider: ProviderName, type: string, summary: Record<string, unknown>) {
   await db.insert(schema.billingEvents).values({ id: eventId(), orgId, provider: "app", providerEventId: eventId(), type, testMode: getBillingProvider().testMode, summary: { ...summary, provider } });
 }
 
 export async function startCheckout(ctx: TenantCtx, raw: unknown) {
   requireManage(ctx);
+  await requireOwnBilling(ctx, getDb());
   const { planId } = z.object({ planId: z.string().min(1).max(60) }).parse(raw);
   const provider = getBillingProvider();
   if (!provider.configured) throw new AppError("validation", PAYMENT_NOT_ENABLED);
@@ -328,6 +352,7 @@ export async function startCheckout(ctx: TenantCtx, raw: unknown) {
 
 export async function openPortal(ctx: TenantCtx) {
   requireManage(ctx);
+  await requireOwnBilling(ctx, getDb());
   const provider = getBillingProvider();
   if (!provider.configured) throw new AppError("validation", PAYMENT_NOT_ENABLED);
   const { sub } = await loadOrgAndSub(ctx.orgId, getDb());
@@ -337,6 +362,7 @@ export async function openPortal(ctx: TenantCtx) {
 
 async function changeCancellation(ctx: TenantCtx, cancel: boolean) {
   requireManage(ctx);
+  await requireOwnBilling(ctx, getDb());
   const provider = getBillingProvider();
   if (!provider.configured) throw new AppError("validation", PAYMENT_NOT_ENABLED);
   const db = getDb();

@@ -74,6 +74,8 @@ export const organizations = pgTable("organizations", {
   planId: text("plan_id").notNull().references(() => plans.id),
   settings: jsonb("settings").$type<{ minMarginBp?: number | null; requireApproval?: boolean }>().notNull().default({}),
   isDemo: boolean("is_demo").notNull().default(false),
+  /** conta cliente gerida por uma agência (organizations.kind = "agencia"); null = independente */
+  agencyOrgId: text("agency_org_id"),
   /** suspensão pela administração da plataforma (motivo em admin_audit_log) */
   suspendedAt: ts("suspended_at"),
   deletedAt: ts("deleted_at"),
@@ -150,7 +152,9 @@ export const assets = pgTable("assets", {
   height: integer("height"),
   sha256: text("sha256"),
   /** origem da imagem (exigido para catálogo): upload do lojista, banco autorizado, etc. */
-  source: text("source").$type<"upload_lojista" | "importacao" | "banco_autorizado" | "demonstracao" | "gerado_sistema">().notNull(),
+  source: text("source").$type<"upload_lojista" | "importacao" | "banco_autorizado" | "demonstracao" | "gerado_sistema" | "ia_remocao_fundo">().notNull(),
+  /** imagem derivada (ex.: fundo removido por IA) aponta para a original */
+  parentAssetId: text("parent_asset_id"),
   sourceNote: text("source_note"),
   originalName: text("original_name"),
   createdBy: text("created_by"),
@@ -422,3 +426,112 @@ export const templateSettings = pgTable("template_settings", {
   sortOrder: integer("sort_order").notNull().default(0),
   updatedAt: updatedAt(),
 });
+
+// ---------------- Etapa 5: vídeos, TV, agência, IA e integrações ----------------
+/** Vídeos MP4 gerados a partir da campanha (fila própria, com status e recuperação de falhas). */
+export const videoJobs = pgTable("video_jobs", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  campaignId: text("campaign_id").notNull(),
+  campaignVersion: integer("campaign_version").notNull(),
+  orientation: text("orientation").$type<"vertical" | "horizontal">().notNull(),
+  /** estilo de animação, duração, áudio, narração etc. */
+  options: jsonb("options").$type<Record<string, unknown>>().notNull().default({}),
+  durationSec: integer("duration_sec").notNull(),
+  status: exportStatusEnum("status").notNull().default("na_fila"),
+  progress: integer("progress").notNull().default(0),
+  attempts: integer("attempts").notNull().default(0),
+  error: text("error"),
+  outputAssetId: text("output_asset_id"),
+  createdBy: text("created_by"),
+  createdAt: createdAt(),
+  startedAt: ts("started_at"),
+  finishedAt: ts("finished_at"),
+}, (t) => [index("video_jobs_org_idx").on(t.orgId, t.createdAt), index("video_jobs_status_idx").on(t.status)]);
+
+/** Telas de TV das lojas: pareamento por código, token do aparelho (somente hash). */
+export const tvScreens = pgTable("tv_screens", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  storeId: text("store_id").notNull(),
+  name: text("name").notNull(),
+  pairingCode: text("pairing_code"),
+  pairingExpiresAt: ts("pairing_expires_at"),
+  deviceTokenHash: text("device_token_hash"),
+  pairedAt: ts("paired_at"),
+  lastSeenAt: ts("last_seen_at"),
+  settings: jsonb("settings").$type<{ orientation?: "horizontal" | "vertical"; slideSeconds?: number }>().notNull().default({}),
+  revokedAt: ts("revoked_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [index("tv_screens_org_idx").on(t.orgId), uniqueIndex("tv_screens_pairing_uq").on(t.pairingCode), uniqueIndex("tv_screens_token_uq").on(t.deviceTokenHash)]);
+
+/** Itens da programação de uma tela (campanha ou vídeo), com agendamento. */
+export const tvPlaylistItems = pgTable("tv_playlist_items", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull(),
+  screenId: text("screen_id").notNull().references(() => tvScreens.id, { onDelete: "cascade" }),
+  kind: text("kind").$type<"campaign" | "video">().notNull(),
+  campaignId: text("campaign_id"),
+  videoJobId: text("video_job_id"),
+  position: integer("position").notNull().default(0),
+  durationSec: integer("duration_sec"),
+  startsAt: ts("starts_at"),
+  endsAt: ts("ends_at"),
+  /** 0=domingo..6; null = todos os dias */
+  daysOfWeek: jsonb("days_of_week").$type<number[] | null>().default(null),
+  /** "08:00-12:00"; null = o dia todo */
+  hours: text("hours"),
+  createdAt: createdAt(),
+}, (t) => [index("tv_playlist_screen_idx").on(t.screenId, t.position)]);
+
+/** Links de prévia para aprovação externa (agência → cliente), com validade e acesso restrito. */
+export const previewLinks = pgTable("preview_links", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  campaignId: text("campaign_id").notNull(),
+  campaignVersion: integer("campaign_version").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  pinHash: text("pin_hash"),
+  expiresAt: ts("expires_at").notNull(),
+  revokedAt: ts("revoked_at"),
+  viewCount: integer("view_count").notNull().default(0),
+  decision: text("decision").$type<"aprovado" | "alteracoes">(),
+  decidedAt: ts("decided_at"),
+  decidedName: text("decided_name"),
+  comment: text("comment"),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("preview_links_token_uq").on(t.tokenHash), index("preview_links_campaign_idx").on(t.orgId, t.campaignId)]);
+
+/** Tokens de API para integrações (sistemas de gestão). Só o hash é guardado. */
+export const apiTokens = pgTable("api_tokens", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  prefix: text("prefix").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+  lastUsedAt: ts("last_used_at"),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+  revokedAt: ts("revoked_at"),
+}, (t) => [uniqueIndex("api_tokens_hash_uq").on(t.tokenHash), index("api_tokens_org_idx").on(t.orgId)]);
+
+/** Pedidos à IA (extração, textos, sugestões, remoção de fundo): resultado sempre revisado por uma pessoa. */
+export const aiRequests = pgTable("ai_requests", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  kind: text("kind").$type<"extrair_lista" | "remover_fundo" | "sugerir_textos" | "sugerir_campanha" | "organizar_produtos">().notNull(),
+  status: text("status").$type<"processando" | "concluida" | "falhou" | "revisada" | "descartada">().notNull().default("processando"),
+  provider: text("provider").notNull(),
+  model: text("model"),
+  credits: integer("credits").notNull().default(0),
+  inputSummary: jsonb("input_summary").$type<Record<string, unknown>>().notNull().default({}),
+  output: jsonb("output").$type<unknown>(),
+  error: text("error"),
+  createdBy: text("created_by").notNull(),
+  reviewedBy: text("reviewed_by"),
+  createdAt: createdAt(),
+  reviewedAt: ts("reviewed_at"),
+}, (t) => [index("ai_requests_org_idx").on(t.orgId, t.createdAt)]);
