@@ -24,8 +24,28 @@ QA_BASE_URL=http://localhost:3105 npx playwright test -c e2e/qa/playwright.confi
 # 6 aprovados (390 px e 1280 px), incluindo a verificação do aviso de reaprovação (D-02 corrigido)
 ```
 
+Com `TRUST_PROXY=0` (como na hospedagem) o limite de cadastros por IP (20 por hora, em memória) vale para todo o
+cliente de teste: a suíte inteira cria ~12 contas, então reinicie o `next start` entre execuções repetidas (ou use
+`TRUST_PROXY=1`, em que os testes variam o `x-forwarded-for`). Erro típico: `signup 429 rate_limited` no `beforeAll`.
+Os testes de versão de modelo usam a versão publicada mais recente (hoje v3) em vez de um número fixo.
+
 `tests/qa/falhas-externas.test.ts` para o worker principal, sobe um worker com Chromium inexistente e depois
 reinicia o worker normal; também sobe um segundo `next start` (porta 3197) apontando para um banco inexistente.
+
+## Validação final (11/10/2026, depois das Etapas 3 a 5)
+
+Rodada completa em **modo de produção, como na hospedagem**: build de produção iniciado por `scripts/start-production.sh` (migrações + `db:seed -- --producao`, sem conta de demonstração, aplicação e worker juntos), `TRUST_PROXY=0`, banco novo.
+
+| Suíte | Resultado |
+|---|---|
+| `tests/qa` (caixa-preta contra o servidor real) | 27/27 aprovados |
+| `e2e/qa` (Playwright, 390 px e 1280 px) | 6/6 aprovados |
+| `npm test` (unidade e integração) | 298/298 aprovados, 29 arquivos |
+| `tsc --noEmit` e `next build` | sem erros |
+
+Nenhum defeito de produto encontrado. Três testes antigos foram atualizados para o comportamento atual sem afrouxar o critério: a conferência de preços no texto do PDF agora usa a posição das palavras (`pdftotext -bbox`) e liga os reais aos próprios centavos; o teste de versão de modelo usa a versão publicada mais recente (v3) em vez de supor v1. Evidências em `/mnt/project-files/encartevarejo/validacao-final/` (pacote exportado, folhas de composição com 1, 12 e 40 produtos e nomes longos, telas 390 e 1280).
+
+Também conferido: landing e as 6 páginas de conteúdo a 390 px e 1280 px (sem rolagem lateral, um H1 por página, exemplos com o aviso de dados de demonstração), `sitemap.xml` e `robots.txt`. A imagem Docker não foi construída neste ambiente (sem acesso ao registro de imagens); o script de início foi testado diretamente.
 
 ## Resultado por critério
 
