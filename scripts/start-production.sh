@@ -13,6 +13,11 @@ if [ ${#APP_SECRET} -lt 32 ]; then echo "APP_SECRET curto demais: use pelo menos
 
 npm run db:migrate
 npm run db:seed -- --producao
+# administração da plataforma: PLATFORM_ADMIN_EMAIL (opcional) recebe acesso a /admin.
+# A pessoa precisa já ter se cadastrado; se ainda não, a inicialização segue normalmente.
+if [ -n "${PLATFORM_ADMIN_EMAIL:-}" ]; then
+  npm run admin:grant -- "$PLATFORM_ADMIN_EMAIL" || echo "Aviso: não foi possível dar acesso de administração a $PLATFORM_ADMIN_EMAIL."
+fi
 mkdir -p "${STORAGE_DIR:-/data/storage}"
 
 # o worker abre as páginas de renderização na própria aplicação
