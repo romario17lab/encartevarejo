@@ -332,3 +332,18 @@ export const jobRuns = pgTable("job_runs", {
   result: jsonb("result"),
   createdAt: createdAt(),
 });
+
+/** Caixa de saída de e-mails transacionais. Sem SMTP configurado, as mensagens ficam aqui
+ *  (visíveis em GET /api/dev/emails apenas fora de produção). */
+export const emailOutbox = pgTable("email_outbox", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id"),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  textBody: text("text_body").notNull(),
+  htmlBody: text("html_body"),
+  kind: text("kind").notNull(), // "password_reset" | "invitation" | ...
+  status: text("status").$type<"armazenado" | "enviado" | "falhou">().notNull().default("armazenado"),
+  createdAt: createdAt(),
+  sentAt: ts("sent_at"),
+}, (t) => [index("email_outbox_created_idx").on(t.createdAt)]);

@@ -1,0 +1,32 @@
+/*
+ * Fontes dos modelos de encarte (EncarteVarejo).
+ * Todas vêm de pacotes @fontsource instalados localmente: nenhuma requisição externa
+ * na prévia ou na exportação (Chromium). Somente o subconjunto "latin" (cobre pt-BR:
+ * á, à, â, ã, é, ê, í, ó, ô, õ, ú, ç) e "latin-ext" para símbolos extras.
+ * Famílias disponíveis para TemplateDefinition.fonts:
+ *   Inter, Montserrat, Oswald, Anton, Bebas Neue, Playfair Display
+ * Quem exporta deve aguardar `document.fonts.ready` antes de capturar a página.
+ */
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
+@import "@fontsource/inter/latin-800.css";
+@import "@fontsource/inter/latin-900.css";
+@import "@fontsource/montserrat/latin-500.css";
+@import "@fontsource/montserrat/latin-600.css";
+@import "@fontsource/montserrat/latin-700.css";
+@import "@fontsource/montserrat/latin-800.css";
+@import "@fontsource/montserrat/latin-900.css";
+@import "@fontsource/montserrat/latin-800-italic.css";
+@import "@fontsource/oswald/latin-400.css";
+@import "@fontsource/oswald/latin-500.css";
+@import "@fontsource/oswald/latin-600.css";
+@import "@fontsource/oswald/latin-700.css";
+@import "@fontsource/anton/latin-400.css";
+@import "@fontsource/bebas-neue/latin-400.css";
+@import "@fontsource/playfair-display/latin-400.css";
+@import "@fontsource/playfair-display/latin-700.css";
+@import "@fontsource/playfair-display/latin-900.css";
+@import "@fontsource/playfair-display/latin-400-italic.css";
+@import "@fontsource/playfair-display/latin-700-italic.css";

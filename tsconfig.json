@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
@@ -14,9 +18,34 @@
     "jsx": "react-jsx",
     "incremental": true,
     "noUncheckedIndexedAccess": false,
-    "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./src/*"] }
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "storage", "e2e-output"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next-gen/types/**/*.ts",
+    ".next-gen/dev/types/**/*.ts",
+    ".next-fe/types/**/*.ts",
+    ".next-fe/dev/types/**/*.ts",
+    ".next-be/types/**/*.ts",
+    ".next-be/dev/types/**/*.ts",
+    ".next-design/types/**/*.ts",
+    ".next-design/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "storage",
+    "e2e-output"
+  ]
 }

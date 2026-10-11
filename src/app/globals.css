@@ -1,22 +1,43 @@
+@import "../render/fonts.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Identidade visual da PLATAFORMA (não dos modelos de encarte). Documentação: docs/03-design.md.
+ * Valores em "R G B" para permitir opacidade no Tailwind (bg-brand/10).
+ * Contrastes (WCAG 2.x) verificados em docs/03-design.md.
+ */
 :root {
-  --ev-brand: 22 101 52;        /* verde feira */
-  --ev-brand-strong: 20 83 45;
-  --ev-brand-soft: 220 252 231;
-  --ev-accent: 234 88 12;       /* laranja oferta */
-  --ev-ink: 17 24 39;
-  --ev-ink-muted: 75 85 99;
+  --ev-brand: 11 107 79;          /* #0B6B4F verde-mercado — branco sobre ele 6,50:1 */
+  --ev-brand-strong: 8 83 64;     /* #085340 hover/pressionado — branco 9,05:1 */
+  --ev-brand-soft: 223 243 234;   /* #DFF3EA fundo suave — brand-strong sobre ele 7,82:1 */
+  --ev-accent: 194 65 12;         /* #C2410C laranja-etiqueta — branco 5,18:1 */
+  --ev-highlight: 255 210 63;     /* #FFD23F amarelo-preço (só fundo; texto ink 11,46:1) */
+  --ev-ink: 22 33 28;             /* #16211C texto — 16,56:1 sobre branco */
+  --ev-ink-muted: 79 91 85;       /* #4F5B55 texto secundário — 7,09:1 sobre branco */
   --ev-surface: 255 255 255;
-  --ev-surface-alt: 248 250 247;
-  --ev-line: 229 231 235;
-  --ev-success: 22 163 74;
-  --ev-warning: 202 138 4;
-  --ev-danger: 220 38 38;
+  --ev-surface-alt: 246 247 242;  /* #F6F7F2 papel */
+  --ev-line: 223 227 218;         /* #DFE3DA divisórias decorativas */
+  --ev-line-strong: 122 133 127;  /* #7A857F borda de campos — 3,74:1 sobre branco (WCAG 1.4.11) */
+  --ev-success: 21 128 61;        /* #15803D — 5,02:1 */
+  --ev-warning: 161 92 7;         /* #A15C07 — 5,19:1 */
+  --ev-danger: 198 40 40;         /* #C62828 — 5,62:1 */
+  --ev-focus: 194 65 12;
+  --ev-radius-sm: 8px;
+  --ev-radius: 12px;
+  --ev-radius-lg: 20px;
+  --ev-shadow: 0 1px 2px rgb(22 33 28 / 0.06), 0 4px 14px rgb(22 33 28 / 0.06);
 }
 
 html { -webkit-text-size-adjust: 100%; }
 body { @apply bg-surface-alt text-ink antialiased; }
-:focus-visible { outline: 3px solid rgb(var(--ev-accent)); outline-offset: 2px; }
+:focus-visible { outline: 3px solid rgb(var(--ev-focus)); outline-offset: 2px; border-radius: 4px; }
+::selection { background: rgb(var(--ev-highlight) / 0.6); color: rgb(var(--ev-ink)); }
+
+/* números de preço alinhados (tabelas, listas de produtos) */
+.ev-num { font-variant-numeric: tabular-nums lining-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
