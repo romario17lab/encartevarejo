@@ -12,7 +12,7 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     background_color: "#f8faf7",
-    theme_color: "#166534",
-    // Ícones: pedir ao Design um src/app/icon.svg (arquivo fora da minha responsabilidade).
+    theme_color: "#0B6B4F",
+    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
   };
 }

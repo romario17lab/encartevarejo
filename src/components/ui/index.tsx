@@ -206,7 +206,7 @@ export function Toaster() {
   const [list, setList] = useStateCompat<ToastMsg[]>([]);
   useEffect(() => { toastListeners.push(setList); return () => { toastListeners = toastListeners.filter((l) => l !== setList); }; }, [setList]);
   return (
-    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4">
+    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-24 sm:bottom-4 z-[60] flex flex-col items-center gap-2 px-4">
       {list.map((t) => (
         <div key={t.id} role={t.tone === "error" ? "alert" : "status"} className={cx("pointer-events-auto max-w-md rounded-xl px-4 py-3 text-sm font-medium text-white shadow-lg", t.tone === "success" ? "bg-success" : t.tone === "error" ? "bg-danger" : "bg-ink")}>{t.text}</div>
       ))}
