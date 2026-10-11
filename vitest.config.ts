@@ -12,7 +12,7 @@ export default defineConfig({
   resolve: { alias: { "@": path.join(root, "src") } },
   test: {
     include: ["tests/**/*.test.{ts,tsx}"],
-    exclude: ["node_modules/**", "e2e/**", ".next*/**"],
+    exclude: ["node_modules/**", "e2e/**", ".next*/**", "tests/qa/**"], // tests/qa: caixa-preta, exigem servidor (docs/05-validacao.md)
     environment: "node",
     globalSetup: ["tests/server/global-setup.ts"],
     // testes de banco rodam em sequência (um arquivo por vez)

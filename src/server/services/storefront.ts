@@ -95,3 +95,33 @@ export async function getStorefront(slug: string, now: Date = new Date()): Promi
     campaigns,
   };
 }
+
+// ---------------- Eventos da vitrine (contagem anônima: sem IP, sem cookie) ----------------
+export type StorefrontEventKind = "view" | "whatsapp_click" | "share";
+
+/** Origem do acesso (?utm_source= ou ?origem=), normalizada: minúsculas, [a-z0-9_.-], até 40 caracteres. */
+export function normalizeSource(raw: string | null | undefined): string | null {
+  const s = (raw ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  return s || null;
+}
+
+/**
+ * Registra um evento para a loja (identificada pelo slug público). A campanha só é gravada se for desta loja.
+ * Devolve false quando a loja não existe/está desativada.
+ */
+export async function recordStorefrontEvent(slug: string, kind: StorefrontEventKind, opts: { source?: string | null; campaignId?: string | null } = {}): Promise<boolean> {
+  if (!/^[a-z0-9-]{2,60}$/.test(slug)) return false;
+  const db = getDb();
+  const [store] = await db.select({ id: schema.stores.id, orgId: schema.stores.orgId }).from(schema.stores)
+    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.stores.orgId))
+    .where(and(eq(schema.stores.slug, slug), isNull(schema.stores.deletedAt), eq(schema.stores.storefrontEnabled, true), isNull(schema.organizations.deletedAt)));
+  if (!store) return false;
+  let campaignId: string | null = null;
+  if (opts.campaignId && /^[A-Za-z0-9_-]{1,64}$/.test(opts.campaignId)) {
+    const [c] = await db.select({ id: schema.campaigns.id }).from(schema.campaigns)
+      .where(and(eq(schema.campaigns.id, opts.campaignId), eq(schema.campaigns.orgId, store.orgId), eq(schema.campaigns.storeId, store.id)));
+    campaignId = c?.id ?? null;
+  }
+  await db.insert(schema.storefrontEvents).values({ orgId: store.orgId, storeId: store.id, campaignId, kind, source: normalizeSource(opts.source) });
+  return true;
+}

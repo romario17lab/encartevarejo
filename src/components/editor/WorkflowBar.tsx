@@ -34,7 +34,14 @@ export function WorkflowBar({ campaign, can, hasErrors, beforeAction, afterActio
   const [serverError, setServerError] = useState<{ message: string; issues: string[] } | null>(null);
   const actions = BY_STATUS[campaign.status].filter((a) => can(PERM[a]));
   const approvedOnce = campaign.approvedVersion != null;
-  const needsReapproval = campaign.needsReapproval ?? (approvedOnce && campaign.approvedHash != null && campaign.contentHash != null && campaign.approvedHash !== campaign.contentHash);
+  const publishedVersion = campaign.publishedVersion ?? null;
+  // O servidor deriva needsReapproval (publishedVersion mantida + status rascunho/em revisão, ou hash aprovado divergente).
+  const needsReapproval = campaign.needsReapproval
+    ?? ((publishedVersion != null && (campaign.status === "rascunho" || campaign.status === "em_revisao"))
+      || (approvedOnce && campaign.approvedHash != null && campaign.contentHash != null && campaign.approvedHash !== campaign.contentHash));
+  const reapprovalText = publishedVersion != null
+    ? `Esta campanha foi alterada depois da aprovação. A vitrine continua mostrando a versão ${publishedVersion} publicada até uma nova aprovação.`
+    : "Esta campanha foi alterada depois da aprovação (produtos, preços, condições ou datas). É preciso uma nova aprovação antes de publicar.";
 
   const run = async (a: Action, body: Record<string, unknown> = {}) => {
     setBusy(a); setServerError(null);
@@ -69,10 +76,12 @@ export function WorkflowBar({ campaign, can, hasErrors, beforeAction, afterActio
           ))}
         </div>
       </div>
-      {(approvedOnce || ["aprovada", "agendada", "publicada"].includes(campaign.status)) && (
-        <p role="note" className={`rounded-xl px-3 py-2 text-xs ${needsReapproval ? "bg-warning/15 font-semibold" : "bg-brand-soft"}`}>
-          {needsReapproval ? "Houve alterações de produtos, preços, condições ou datas depois da aprovação. É preciso aprovar de novo antes de publicar ou exportar." : "Alterações de preço após a aprovação exigem nova aprovação."}
+      {needsReapproval ? (
+        <p role="note" data-testid="aviso-reaprovacao" className="rounded-xl border border-warning/60 bg-warning/15 px-3 py-2 text-xs font-semibold">
+          {reapprovalText}
         </p>
+      ) : (approvedOnce || ["aprovada", "agendada", "publicada"].includes(campaign.status)) && (
+        <p role="note" className="rounded-xl bg-brand-soft px-3 py-2 text-xs">Alterações de preço após a aprovação exigem nova aprovação.</p>
       )}
       {serverError && (
         <div role="alert" className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs">

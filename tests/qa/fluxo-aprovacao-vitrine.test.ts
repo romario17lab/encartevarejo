@@ -117,7 +117,7 @@ describe("aprovação, publicação e vitrine", () => {
 });
 
 describe("defeitos conhecidos (falham enquanto existirem)", () => {
-  it.fails("D-03: o endereço da vitrine impresso nas peças (APP_URL/loja/<slug>) deveria abrir uma página", async () => {
+  it("D-03: o endereço da vitrine impresso nas peças (APP_URL/loja/<slug>) abre uma página", async () => {
     const A = await signup("Link");
     const p = await product(A, { name: "Pão de forma", unit: "pct", regularCents: 899 });
     const c = (await campaign(A, [p.id])).campaign;

@@ -321,7 +321,7 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
         <button type="button" onClick={() => setDlg("menu")} aria-label="Mais ações" className="rounded-lg p-2 hover:bg-ink/5 sm:hidden"><IconMenu size={20} /></button>
       </div>
       <div className="border-t border-line px-3 py-2 lg:px-4">
-        <WorkflowBar campaign={{ ...server, ...doc.campaign, status: server.status, version: server.version, contentHash: server.contentHash, approvedHash: server.approvedHash, approvedVersion: server.approvedVersion, scheduledPublishAt: server.scheduledPublishAt }}
+        <WorkflowBar campaign={{ ...server, ...doc.campaign, status: server.status, version: server.version, contentHash: server.contentHash, approvedHash: server.approvedHash, approvedVersion: server.approvedVersion, scheduledPublishAt: server.scheduledPublishAt, publishedVersion: server.publishedVersion ?? null, needsReapproval: server.needsReapproval ?? false }}
           can={can} hasErrors={hasErrors} beforeAction={flushOrThrow} afterAction={reload} />
       </div>
     </header>

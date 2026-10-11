@@ -83,7 +83,7 @@ describe("composição nos 9 formatos (servidor real)", () => {
 });
 
 describe("defeitos conhecidos", () => {
-  it.fails("D-01: nome do clube não deveria ser cortado com reticências (falha enquanto o defeito existir)", () => {
+  it("D-01: nome do clube não é cortado com reticências (corrigido; regressão)", () => {
     expect(known).toEqual([]);
   });
 });

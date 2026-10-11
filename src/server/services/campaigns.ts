@@ -32,6 +32,16 @@ export async function getCampaignRow(ctx: TenantCtx, id: string, db: Executor = 
   return row;
 }
 
+/**
+ * A aprovação caiu e a vitrine ainda mostra um instantâneo antigo. Derivado das colunas existentes:
+ * editar o conteúdo de uma campanha aprovada/agendada/publicada a devolve a `rascunho` e limpa a aprovação,
+ * mas mantém `publishedVersion` (o que está na vitrine). Também cobre o caso de hash aprovado divergente.
+ */
+export function campaignNeedsReapproval(c: Pick<CampaignRow, "status" | "publishedVersion" | "approvedHash" | "contentHash">): boolean {
+  if (c.publishedVersion != null && (c.status === "rascunho" || c.status === "em_revisao")) return true;
+  return c.approvedHash !== null && c.approvedHash !== c.contentHash;
+}
+
 function presentCampaign(c: CampaignRow) {
   const { deletedAt: _d, orgId: _o, ...rest } = c;
   return rest;
@@ -46,7 +56,7 @@ export async function getEditorState(ctx: TenantCtx, id: string, db: Executor = 
     .from(schema.stores).where(and(eq(schema.stores.id, c.storeId), eq(schema.stores.orgId, ctx.orgId)));
   const issues = await computeIssues(db, ctx.orgId, { startsAt: iso(c.startsAt), endsAt: iso(c.endsAt) }, items);
   return {
-    campaign: { ...presentCampaign(c), needsReapproval: c.approvedHash !== null && c.approvedHash !== c.contentHash },
+    campaign: { ...presentCampaign(c), needsReapproval: campaignNeedsReapproval(c) },
     items: items.map((i) => ({ ...i, imageUrl: i.imageAssetId ? `/api/assets/${i.imageAssetId}` : null })),
     pieces,
     template: templateInfo(c.templateId, c.templateVersion),
@@ -81,7 +91,7 @@ export async function listCampaigns(ctx: TenantCtx, q: CampaignListQuery) {
     startsAt: r.c.startsAt, endsAt: r.c.endsAt, version: r.c.version, publishedVersion: r.c.publishedVersion, publishedAt: r.c.publishedAt,
     scheduledPublishAt: r.c.scheduledPublishAt, templateId: r.c.templateId, templateVersion: r.c.templateVersion,
     parentCampaignId: r.c.parentCampaignId, itemCount: r.itemCount, updatedAt: r.c.updatedAt,
-    needsReapproval: r.c.approvedHash !== null && r.c.approvedHash !== r.c.contentHash,
+    needsReapproval: campaignNeedsReapproval(r.c),
   }));
 }
 

@@ -142,6 +142,36 @@ describe("campanhas", () => {
     expect((await getStorefront(slug))!.campaigns).toHaveLength(0);
   });
 
+  it("D-02: editor e lista sinalizam nova aprovação enquanto a vitrine mostra a versão publicada", async () => {
+    const { org, state } = await setup();
+    const id = state.campaign.id;
+    expect(state.campaign.needsReapproval).toBe(false);
+    await transitionCampaign(org.ctx, id, "approve");
+    const pub = await transitionCampaign(org.ctx, id, "publish");
+    expect((await getEditorState(org.ctx, id)).campaign.needsReapproval).toBe(false);
+    // edição que não muda o hash: sem aviso
+    const s1 = await saveCampaign(org.ctx, id, { baseVersion: pub.campaign.version, campaign: { title: "Outro título" } });
+    expect(s1.campaign.needsReapproval).toBe(false);
+    // mudança de preço: aviso aparece já na resposta do salvamento (é o que o editor usa)
+    const changed = s1.items.map((i) => (i.name === "Feijão 1kg" ? { ...i, offer: { ...i.offer, priceCents: 799 } } : i));
+    const s2 = await saveCampaign(org.ctx, id, { baseVersion: s1.campaign.version, items: changed });
+    expect(s2.campaign.status).toBe("rascunho");
+    expect(s2.campaign.approvedHash).toBeNull();
+    expect(s2.campaign.needsReapproval).toBe(true);
+    expect(s2.campaign.publishedVersion).toBe(1);
+    expect((await listCampaigns(org.ctx, {})).find((c) => c.id === id)!.needsReapproval).toBe(true);
+    // continua valendo em revisão; some ao aprovar de novo
+    await transitionCampaign(org.ctx, id, "submit");
+    expect((await getEditorState(org.ctx, id)).campaign.needsReapproval).toBe(true);
+    await transitionCampaign(org.ctx, id, "approve");
+    expect((await getEditorState(org.ctx, id)).campaign.needsReapproval).toBe(false);
+    await transitionCampaign(org.ctx, id, "publish");
+    expect((await getEditorState(org.ctx, id)).campaign.needsReapproval).toBe(false);
+    // retirada da vitrine: nada publicado, sem aviso
+    await transitionCampaign(org.ctx, id, "unpublish");
+    expect((await getEditorState(org.ctx, id)).campaign.needsReapproval).toBe(false);
+  });
+
   it("vitrine respeita as datas do instantâneo publicado", async () => {
     const org = await makeOrg();
     const p = await makeProduct(org);

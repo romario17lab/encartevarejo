@@ -75,6 +75,18 @@ export function priceModel(offer: Offer, unit: Unit | null): PriceModel {
   return m;
 }
 
+/** Divide um texto em 2 linhas de tamanho parecido (por palavras). null se tiver uma palavra só. */
+export function splitBalanced(text: string): [string, string] | null {
+  const words = text.trim().split(/\s+/);
+  if (words.length < 2) return null;
+  let best: [string, string] | null = null;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(" "); const b = words.slice(i).join(" ");
+    if (!best || Math.max(a.length, b.length) < Math.max(best[0].length, best[1].length)) best = [a, b];
+  }
+  return best;
+}
+
 /** Recuo interno do conteúdo para cada formato de etiqueta (frações de largura/altura). */
 function shapeInset(shape: PriceShape, w: number, h: number) {
   switch (shape) {
@@ -177,11 +189,30 @@ export function PriceTag(p: PriceTagProps): ReactElement {
   model.subs = model.subs.map((s) => (fitSmall(s.text, sFs * 0.92) < sFs * 0.75 ? { text: s.short, short: s.short } : s));
   const preText = model.pre ? `${model.pre.text} ${model.pre.strike ?? ""} ${model.pre.post ?? ""}`.trim() : "";
   let preFs = model.pre ? fitSmall(preText, sFs * 1.08) : 0;
-  let chipFs = model.chip ? fitOneLine(model.chip.toUpperCase(), W * 0.88, sFs, { family: bf.family, upper: true, minFs: 6 }) : 0;
+  // nome do clube: 1 linha; se ficar pequeno demais, quebra em 2 linhas equilibradas; se ainda assim não couber,
+  // usa "Clube" (o nome completo continua no aria-label). Nunca reticências.
+  let chipLines: string[] = [];
+  let chipFs = 0;
+  if (model.chip) {
+    // largura do texto em maiúsculas + letterSpacing 0,03em + padding horizontal (0,5em de cada lado), com folga
+    const bm = metricsOf(bf.family);
+    const fitChip = (t: string) => round(Math.min(sFs, (W * 0.94) / (t.length * (bm.upAvg + 0.03) * 1.12 + 1)));
+    chipLines = [model.chip];
+    chipFs = fitChip(model.chip);
+    if (chipFs < sFs * 0.75) {
+      const two = splitBalanced(model.chip);
+      if (two) {
+        const fs2 = Math.min(...two.map(fitChip));
+        if (fs2 > chipFs) { chipLines = two; chipFs = fs2; }
+      }
+    }
+    if (chipFs < 6 && model.chip.trim().toUpperCase() !== "CLUBE") { chipLines = ["Clube"]; chipFs = fitChip("Clube"); }
+    chipFs = Math.max(chipFs, 4);
+  }
   let subFs = model.subs.length ? Math.min(...model.subs.map((s) => fitSmall(s.text, sFs * 0.92))) : 0;
   let xFs = extras.length ? Math.min(...extras.map((s) => fitOneLine(s, W * 1.9, sFs * 0.82, { family: bf.family, minFs: 6 }))) : 0; // até 2 linhas
   const extrasLines = () => (extras.length ? Math.min(2, Math.ceil((extras.join(" · ").length * metricsOf(bf.family).avg * 1.12 * xFs) / W)) : 0);
-  const smallH = () => preFs * 1.25 + chipFs * 1.75 + model.subs.length * subFs * 1.2 + extrasLines() * xFs * 1.2;
+  const smallH = () => preFs * 1.25 + (chipLines.length ? chipFs * (1.75 + 1.18 * (chipLines.length - 1)) : 0) + model.subs.length * subFs * 1.2 + extrasLines() * xFs * 1.2;
   const budget = H * (model.cents == null ? 0.6 : 0.5);
   if (smallH() > budget) {
     const k = budget / smallH();
@@ -241,8 +272,8 @@ export function PriceTag(p: PriceTagProps): ReactElement {
           </div>
         )}
         {model.chip && (
-          <div style={{ ...bodyStyle, color: chipFg, background: chipBg, fontSize: round(chipFs), fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.03em", padding: `${round(chipFs * 0.18)}px ${round(chipFs * 0.5)}px`, borderRadius: round(chipFs * 0.4), margin: `${round(chipFs * 0.12)}px 0` }}>
-            {model.chip}
+          <div data-ev-club="" style={{ ...bodyStyle, textOverflow: "clip", color: chipFg, background: chipBg, fontSize: round(chipFs), fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.03em", padding: `${round(chipFs * 0.18)}px ${round(chipFs * 0.5)}px`, borderRadius: round(chipFs * 0.4), margin: `${round(chipFs * 0.12)}px 0`, textAlign: "center" }}>
+            {chipLines.map((l, i) => <div key={i} style={{ whiteSpace: "nowrap" }}>{l}</div>)}
           </div>
         )}
         {main}
