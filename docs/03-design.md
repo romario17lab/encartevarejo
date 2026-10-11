@@ -207,3 +207,40 @@ Pedido do responsável: modelos mais chamativos, no nível visual dos temas de r
 
 Hortifrúti, açougue, padaria, gelada e empório usam a paleta temática (`useBrandColors: false`); logo e contatos da loja continuam aplicados.
 Checagem: `npx tsx src/templates/__dev__/check-overflow.ts --version=2` (756 renderizações, 0 problemas). Amostras: `npx tsx src/templates/__dev__/samples.tsx --version=2`.
+
+## Versão 3 dos modelos (2026-10-11)
+
+A versão 3 aplica as técnicas de `docs/01d-analise-canva.md`. Os 12 modelos mantêm os mesmos ids, ficam em `src/templates/<id>/v3.tsx` e são registrados depois das versões 1 e 2, que continuam iguais. O código compartilhado fica em `src/templates/parts3/`:
+
+- `look3.ts`: tipos do visual, paletas por segmento (`SEGMENT_PALETTES`) e `ground3()`.
+- `layers.tsx`: fundo em camadas (listras, raios, pontos, palavra da campanha, grade, ondas, confete, textura) com intensidade ajustável.
+- `PriceTag3.tsx`: formatos da etiqueta de preço, todos na ordem R$ / inteiro / centavos / selo da unidade. Os formatos são placa, pílula, etiqueta, círculo, selo, solto, bandeira, ticket e explosão. Quando falta espaço, um formato redondo vira o parente largo mais próximo.
+- `Title3.tsx`: título em camadas, com faixa inclinada ou cursiva (Playfair Display Italic). Em TV e banner fica numa linha só.
+- `Card3.tsx`: estilos de card (recorte, orelha, círculo, hexágono, split, moldura, arco). A foto sai do card sem distorção e nunca cobre o nome nem o preço. Há também o destaque em pedestal ou em placa.
+- `deco.tsx`: elementos de profundidade cortados pela borda da página e kits sazonais (`SEASON_KITS`: natal, páscoa, mães, black friday, arraiá), aplicados com `withKit(look, kit)`.
+- `Header3.tsx`, `Footer3.tsx`, `Tags3.tsx`, `define3.tsx`: cabeçalho, rodapé, etiquetas e fábrica dos modelos.
+
+| Modelo | Preço | Card | Fundo | Título |
+|---|---|---|---|---|
+| feira-da-semana | placa preta, contorno amarelo | recorte | vermelho com listras e palavra | faixa |
+| hortifruti-fresco | etiqueta amarela | círculo | verde com pontos e folhas | cursiva |
+| acougue-na-brasa | bandeira dourada | moldura escura | madeira | faixa vinho |
+| padaria-do-forno | círculo marrom | orelha | papel com pontos | cursiva |
+| gelada-na-hora | pílula marinho | hexágono | azul com raios e bolhas | faixa branca |
+| economia-total | solto (dígitos com contorno) | split branco e preto | listras de alerta amarelas | faixa |
+| vitrine-clean | ticket coral | recorte com borda | papel com grade | faixa (Montserrat) |
+| emporio-gourmet | selo dourado | arco creme | verde com listras douradas | cursiva |
+| natal-em-familia | etiqueta vermelha, contorno dourado | moldura creme | pinheiro com neve, kit natal | cursiva |
+| mega-ofertas | explosão amarela | orelha magenta | carvão com raios magenta | faixa |
+| atacarejo-caixa | ticket preto | orelha laranja | kraft com listras | faixa (Bebas) |
+| casa-e-limpeza | círculo violeta | split branco e água | violeta com ondas | faixa (Montserrat) |
+
+**Densidade** (`BASE_RULES_V3`): encarte 16 por página, post quadrado 4, post feed 6, story 3 por tela, banner 3, TV 6, cartaz 1 (destaque).
+
+**Rodapé**: o rodapé usa só dados da loja. Ordem: WhatsApp, endereço, horário, entrega (só se a loja tiver esse dado, que hoje não existe), telefone, Instagram, site. A validade fica em destaque, e "Oferta válida enquanto durar o estoque" é acrescentado quando o texto de validade ainda não fala de estoque.
+
+**Cores da marca**: aplicadas por `strong()` e `pop()` em feira, economia, vitrine, atacarejo e casa. Os outros modelos usam a paleta do segmento.
+
+**Checagem**: `npx tsx src/templates/__dev__/check-overflow.ts --version=3`, com 864 renderizações e 0 problemas. Há um caso novo, `fotos-proporcao`, com fotos muito largas, muito altas, minúsculas e grandes. Há também uma regra nova para v3 ou mais: "foto sobre o nome".
+
+**Amostras**: `npx tsx src/templates/__dev__/samples.tsx --version=3 --extras=<ids>` gera os arquivos em `amostras-v3/`. Os kits sazonais saem com `npx tsx src/templates/__dev__/kits.tsx`.

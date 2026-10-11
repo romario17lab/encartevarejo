@@ -28,7 +28,15 @@ const cases = (): Case[] => [
   { name: "sem-fotos", campaign: demoCampaign(6, { noImages: true, subtitle: null }) },
   { name: "por-categoria", campaign: demoCampaign(20), overrides: { order: "category", showCategoryHeaders: true } },
   { name: "fonte-130", campaign: demoCampaign(8), overrides: { fontScale: 1.3 } },
+  { name: "fotos-proporcao", campaign: oddRatios(demoCampaign(10, { highlights: 2 })) },
 ];
+
+/** Fotos com proporções extremas (muito larga, muito alta, minúscula): nunca podem distorcer nem cobrir nome/preço. */
+function oddRatios(c: RenderCampaign): RenderCampaign {
+  const svg = (w: number, h: number, fill: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${Math.min(w, h) / 4}" fill="${fill}"/></svg>`)}`;
+  const imgs = [svg(800, 100, "#2f7d32"), svg(100, 700, "#1565c0"), svg(12, 12, "#c62828"), svg(1000, 1000, "#6a1b9a")];
+  return { ...c, items: c.items.map((it, i) => ({ ...it, imageUrl: imgs[i % imgs.length] })) };
+}
 
 type Problem = string;
 
@@ -94,6 +102,14 @@ async function main() {
               // nomes v2 têm linhas explícitas: só a largura importa (a altura de linha justa conta o acento como transbordo)
               const vertical = el.dataset.evName === undefined && el.dataset.evLogo === undefined && el.scrollHeight > el.clientHeight + 1;
               if (el.scrollWidth > el.clientWidth + 1 || vertical) out.push(`p${pi + 1} texto cortado em ${el.dataset.evName !== undefined ? "nome" : el.dataset.evFooter !== undefined ? "rodapé" : el.dataset.evLogo !== undefined ? "logo" : "fita"} (${el.scrollWidth}x${el.scrollHeight} > ${el.clientWidth}x${el.clientHeight})`);
+            });
+            // (v3+) a foto que sai do card nunca cobre o nome
+            const v3 = /@([3-9]|\d{2,})$/.test(root.dataset.evTemplate ?? "");
+            if (v3) cells.forEach((cell) => {
+              const ph = cell.querySelector<HTMLElement>("[data-ev-photo]"), nm = cell.querySelector<HTMLElement>("[data-ev-name]");
+              if (!ph || !nm) return;
+              const a = ph.getBoundingClientRect(), b = nm.getBoundingClientRect();
+              if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(`p${pi + 1}:${cell.dataset.evCell} foto sobre o nome`);
             });
             // peças internas do preço (aba, preço anterior, placa, linhas) não se sobrepõem
             if (v2) root.querySelectorAll<HTMLElement>("[data-ev-price-inner]").forEach((inner) => {
