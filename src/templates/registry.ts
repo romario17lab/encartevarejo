@@ -13,6 +13,19 @@ import natalEmFamiliaV1 from "./natal-em-familia/v1";
 import megaOfertasV1 from "./mega-ofertas/v1";
 import atacarejoCaixaV1 from "./atacarejo-caixa/v1";
 import casaELimpezaV1 from "./casa-e-limpeza/v1";
+// v2: mesmo id, visual de alto impacto (parts2). A v1 continua registrada para campanhas antigas.
+import feiraDaSemanaV2 from "./feira-da-semana/v2";
+import hortifrutiFrescoV2 from "./hortifruti-fresco/v2";
+import acougueNaBrasaV2 from "./acougue-na-brasa/v2";
+import padariaDoFornoV2 from "./padaria-do-forno/v2";
+import geladaNaHoraV2 from "./gelada-na-hora/v2";
+import economiaTotalV2 from "./economia-total/v2";
+import vitrineCleanV2 from "./vitrine-clean/v2";
+import emporioGourmetV2 from "./emporio-gourmet/v2";
+import natalEmFamiliaV2 from "./natal-em-familia/v2";
+import megaOfertasV2 from "./mega-ofertas/v2";
+import atacarejoCaixaV2 from "./atacarejo-caixa/v2";
+import casaELimpezaV2 from "./casa-e-limpeza/v2";
 
 /** Todas as versões de todos os modelos (versões antigas NUNCA são removidas). */
 export const TEMPLATE_VERSIONS: TemplateDefinition[] = [
@@ -28,6 +41,18 @@ export const TEMPLATE_VERSIONS: TemplateDefinition[] = [
   megaOfertasV1,
   atacarejoCaixaV1,
   casaELimpezaV1,
+  feiraDaSemanaV2,
+  hortifrutiFrescoV2,
+  acougueNaBrasaV2,
+  padariaDoFornoV2,
+  geladaNaHoraV2,
+  economiaTotalV2,
+  vitrineCleanV2,
+  emporioGourmetV2,
+  natalEmFamiliaV2,
+  megaOfertasV2,
+  atacarejoCaixaV2,
+  casaELimpezaV2,
 ];
 
 export function getTemplate(id: string, version?: number): TemplateDefinition | undefined {

@@ -185,3 +185,25 @@ Todos suportam os 9 formatos. `natal-em-familia` e `mega-ofertas` usam `useBrand
 - `npx tsx src/templates/__dev__/samples.tsx` — gera as PNGs em `/mnt/project-files/encartevarejo/amostras/`
   e a folha de contato `00-visao-geral.png`.
 - Galeria no app: `/modelos-amostra` (dev; em produção exige `EV_SHOW_SAMPLES=1`).
+
+## Versão 2 dos modelos (2026-10-11)
+
+Pedido do responsável: modelos mais chamativos, no nível visual dos temas de referência (ver `docs/01c-analise-visual-temas.md`), com arte 100% própria. Cada modelo ganhou a `version: 2` com o mesmo id; a v1 continua no registro e campanhas antigas mantêm a versão fixada. Peças compartilhadas em `src/templates/parts2/` (título 3D, fundos em camadas, objetos SVG próprios, fitas, placa de preço com aba "POR", estrela de desconto, rodapé em pílula).
+
+| Modelo | Cabeçalho e página | Objeto | Placa de preço |
+|---|---|---|---|
+| feira-da-semana | raios vermelhos, borda xadrez | carrinho | preta |
+| hortifruti-fresco | madeira, folhas sobre verde | caixote | verde |
+| acougue-na-brasa | chamas, papel vinho com dourado | churrasqueira | escura |
+| padaria-do-forno | raios marrons, trigo sobre caramelo | pão | escura |
+| gelada-na-hora | gelo, bolhas sobre azul | balde de gelo | azul-marinho |
+| economia-total | azul royal com confete | etiqueta | escura |
+| vitrine-clean | listras coral | sacola | azul-marinho |
+| emporio-gourmet | preto com brilhos dourados | vinho | preta e dourada |
+| natal-em-familia | vermelho com neve | presente | vermelha |
+| mega-ofertas | raios de fogo, faixa zebrada | megafone | preta |
+| atacarejo-caixa | papel kraft | palete | preta |
+| casa-e-limpeza | violeta com bolhas | borrifador | violeta escura |
+
+Hortifrúti, açougue, padaria, gelada e empório usam a paleta temática (`useBrandColors: false`); logo e contatos da loja continuam aplicados.
+Checagem: `npx tsx src/templates/__dev__/check-overflow.ts --version=2` (756 renderizações, 0 problemas). Amostras: `npx tsx src/templates/__dev__/samples.tsx --version=2`.
