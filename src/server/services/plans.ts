@@ -56,6 +56,8 @@ export const FEATURE_LABEL: Record<string, string> = {
   aprovacao_multipla: "Aprovação em várias etapas",
   ia: "Recursos de inteligência artificial",
   video: "Vídeos",
+  tv: "TV da loja",
+  agencia: "Modo agência",
 };
 
 /** Início do mês corrente no horário de Brasília (UTC-3, sem horário de verão). */
@@ -139,8 +141,8 @@ export async function listActivePlans(db: Executor = getDb()) {
  */
 export const DEFAULT_PLANS: Array<{ id: string; name: string; sortOrder: number; limits: PlanLimits }> = [
   { id: "inicial", name: "Inicial", sortOrder: 1, limits: { stores: 1, users: 2, storageMb: 1024, exportsPerMonth: 200, videoMinutesPerMonth: 0, aiCreditsPerMonth: 0, features: ["vitrine", "exportacao"] } },
-  { id: "profissional", name: "Profissional", sortOrder: 2, limits: { stores: 3, users: 8, storageMb: 5120, exportsPerMonth: 1000, videoMinutesPerMonth: 10, aiCreditsPerMonth: 100, features: ["vitrine", "exportacao", "agendamento", "filiais"] } },
-  { id: "redes", name: "Redes e Agências", sortOrder: 3, limits: { stores: 30, users: 50, storageMb: 20480, exportsPerMonth: 5000, videoMinutesPerMonth: 60, aiCreditsPerMonth: 500, features: ["vitrine", "exportacao", "agendamento", "filiais", "aprovacao_multipla"] } },
+  { id: "profissional", name: "Profissional", sortOrder: 2, limits: { stores: 3, users: 8, storageMb: 5120, exportsPerMonth: 1000, videoMinutesPerMonth: 10, aiCreditsPerMonth: 100, features: ["vitrine", "exportacao", "agendamento", "filiais", "tv"] } },
+  { id: "redes", name: "Redes e Agências", sortOrder: 3, limits: { stores: 30, users: 50, storageMb: 20480, exportsPerMonth: 5000, videoMinutesPerMonth: 60, aiCreditsPerMonth: 500, features: ["vitrine", "exportacao", "agendamento", "filiais", "aprovacao_multipla", "tv", "agencia"] } },
 ];
 
 /**
