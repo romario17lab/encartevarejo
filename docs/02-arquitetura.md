@@ -109,3 +109,14 @@ RenderCampaign + TemplateDefinition + FormatSpec + PieceOverrides
 | Coordenador | `src/domain/**`, `src/templates/contract.ts`, `docs/02-arquitetura.md`, `package.json`, `README.md` | |
 
 Pedidos de mudança em contrato: o agente descreve no relatório final; o coordenador aplica.
+
+## Regras de negócio implementadas (Etapa 2)
+
+- **contentHash** (exige nova aprovação quando muda): nome, marca, tamanho, unidade e oferta completa de cada item (ordem ignorada), mais `storeId`, `startsAt`, `endsAt`, `validityNote` da campanha. Não entram: ordem, destaque, imagens/enquadramento, título, personalizações, modelo e "pausado".
+- **Edição após aprovação**: se o hash muda com a campanha `aprovada`, `agendada` ou `publicada`, ela volta a `rascunho` (aprovação e agendamento limpos; histórico no audit). `publishedVersion` não muda: a vitrine continua mostrando o último instantâneo publicado até nova aprovação e publicação.
+- **Vitrine**: campanhas com `publishedVersion`, status diferente de `encerrada` e data atual dentro do período do instantâneo. Itens pausados somem na hora. Custo nunca aparece.
+- **Autoaprovação**: quem editou por último não aprova a própria campanha se existir outro admin/aprovador, exceto com `settings.requireApproval === false`. Conta com um único admin pode aprovar a própria.
+- **Agendador** (worker, a cada minuto): publica `agendada` vencidas (se o hash ainda bate; senão volta a rascunho) e encerra campanhas com `endsAt` no passado. Idempotente.
+- **Snapshot** (`campaign_versions.snapshot`): `{ campaign, items, pieces }` com datas ISO (`CampaignSnapshot` em `src/server/services/campaign-state.ts`).
+- Endpoints extras: `invitations/lookup`, `products/categories`, `campaigns/[id]/versions/[v]`, `calendar`, `dev/emails` (só fora de produção), `storefront/[slug]`, `stores/[id]/prices`.
+- Variáveis do worker: `RENDER_BASE_URL` (ou `APP_URL`), opcionais `EXPORT_CONCURRENCY`, `EXPORT_MAX_PAGES`, `EXPORT_RENDER_TIMEOUT_MS`, `EXPORT_INLINE=1` (exporta dentro do processo web, para desenvolvimento/testes).
