@@ -9,7 +9,7 @@ import { AppError, notFound } from "../errors";
 import { newId } from "../ids";
 import { writeAudit } from "../audit";
 import { requirePermission } from "../tenant";
-import { assertFeature, getOrgPlan } from "./plans";
+import { assertFeature, assertStoreLimit, getOrgPlan } from "./plans";
 import { insertBrandKit } from "./brand-kits";
 import { insertStore, storeInputSchema } from "./stores";
 import { createTrialSubscription } from "./subscriptions";
@@ -109,8 +109,9 @@ export async function createClientAccount(ctx: TenantCtx, raw: unknown) {
       if (rows.length !== uniqueIds.length) throw new AppError("validation", "Uma das pessoas escolhidas não participa da agência.");
     }
 
+    // "Agência paga": o cliente usa o plano e a assinatura da agência, e a loja dele conta no limite de lojas dela
+    await assertStoreLimit(ctx.orgId, tx);
     const orgId = newId("org");
-    // o cliente usa o mesmo plano da agência; assinatura própria (período de teste, como no cadastro)
     await tx.insert(schema.organizations).values({ id: orgId, name: input.name, planId: agency.planId, kind: "varejo", agencyOrgId: ctx.orgId });
     const bk = await insertBrandKit(orgId, input.name, tx);
     const store = await insertStore(orgId, storeInputSchema.parse({ name: input.storeName, segment: input.segment, brandKitId: bk.id }), tx);
@@ -118,7 +119,6 @@ export async function createClientAccount(ctx: TenantCtx, raw: unknown) {
       { orgId, userId: ctx.userId, role: "admin" as const },
       ...extra.map((m) => ({ orgId, userId: m.userId, role: m.role })),
     ]);
-    await createTrialSubscription(orgId, agency.planId, tx);
     await writeAudit(tx, { orgId, userId: ctx.userId, action: "org.create", entityType: "organization", entityId: orgId,
       summary: `Conta "${input.name}" criada pela agência "${agency.name}".`, data: { agencyOrgId: ctx.orgId, members: 1 + extra.length } });
     await writeAudit(tx, { orgId: ctx.orgId, userId: ctx.userId, action: "agency.client_create", entityType: "organization", entityId: orgId,
@@ -202,7 +202,11 @@ export async function detachClient(ctx: TenantCtx, clientOrgId?: string | null) 
       throw new AppError("validation", "Antes de desligar, convide para a conta do cliente um administrador da própria loja (com acesso a todas as lojas). Sem isso a conta ficaria sem responsável.");
     }
     const now = new Date();
-    await tx.update(schema.organizations).set({ agencyOrgId: null, updatedAt: now }).where(eq(schema.organizations.id, clientId));
+    // ao sair da agência a conta passa a ter cobrança própria: plano atual da agência, com período de teste
+    const [agencyPlan] = await tx.select({ planId: schema.organizations.planId }).from(schema.organizations).where(eq(schema.organizations.id, agencyId));
+    const planId = agencyPlan?.planId ?? client.planId;
+    await tx.update(schema.organizations).set({ agencyOrgId: null, planId, updatedAt: now }).where(eq(schema.organizations.id, clientId));
+    await createTrialSubscription(clientId, planId, tx, now);
     if (removed.length) {
       const ids = removed.map((m) => m.userId);
       await tx.delete(schema.memberships).where(and(eq(schema.memberships.orgId, clientId), inArray(schema.memberships.userId, ids)));

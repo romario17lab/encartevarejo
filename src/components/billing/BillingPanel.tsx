@@ -146,7 +146,12 @@ export function BillingPanel() {
               {dates.map(([k, v]) => <div key={k}><dt className="text-ink-muted">{k}</dt><dd className="font-semibold">{v}</dd></div>)}
             </dl>
           )}
-          {online ? (
+          {d.paidByAgency ? (
+            <div className="mt-4 rounded-xl border border-line bg-surface-alt p-3 text-sm">
+              <p className="font-semibold">Conta paga pela agência {d.paidByAgency.name}.</p>
+              <p className="mt-1 text-ink-muted">O plano, os limites e o pagamento são os da agência. As lojas, usuários e o consumo desta conta somam no plano dela.</p>
+            </div>
+          ) : online ? (
             d.canManage ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 {s.hasPaymentAccount && <Button variant="secondary" loading={busy === "portal"} onClick={portal}>Gerenciar pagamento</Button>}
@@ -167,7 +172,7 @@ export function BillingPanel() {
 
         <Card>
           <h2 className="font-display font-bold">Consumo</h2>
-          <p className="mt-1 text-sm text-ink-muted">Exportações, IA e vídeo contam a partir do dia 1º de cada mês.</p>
+          <p className="mt-1 text-sm text-ink-muted">Exportações, IA e vídeo contam a partir do dia 1º de cada mês.{d.paidByAgency ? " Os números somam a agência e todas as contas de clientes dela." : ""}</p>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <UsageMeter label="Lojas" meter={d.usage.stores} />
             <UsageMeter label="Usuários (com convites)" meter={d.usage.users} />

@@ -1,23 +1,39 @@
-import { and, asc, count, eq, gt, gte, isNull, sum } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, gt, gte, inArray, isNull, or, sum } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import type { Executor } from "../db/tx";
 import { AppError } from "../errors";
 
 export type PlanLimits = typeof schema.plans.$inferSelect["limits"];
 
+/**
+ * Grupo de cobrança: conta cliente de agência é paga pela agência ("Agência paga").
+ * O plano, a assinatura e os limites são os da agência, somados entre a agência e todos os clientes dela.
+ */
+export async function billingGroup(orgId: string, db: Executor = getDb()): Promise<{ billingOrgId: string; orgIds: string[] }> {
+  const [org] = await db.select({ agencyOrgId: schema.organizations.agencyOrgId }).from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  const billingOrgId = org?.agencyOrgId ?? orgId;
+  const rows = await db.select({ id: schema.organizations.id }).from(schema.organizations)
+    .where(and(or(eq(schema.organizations.id, billingOrgId), eq(schema.organizations.agencyOrgId, billingOrgId)), isNull(schema.organizations.deletedAt)));
+  const orgIds = [...new Set([billingOrgId, orgId, ...rows.map((r) => r.id)])];
+  return { billingOrgId, orgIds };
+}
+
 export async function getOrgPlan(orgId: string, db: Executor = getDb()) {
+  const { billingOrgId } = await billingGroup(orgId, db);
   const [row] = await db.select({ plan: schema.plans }).from(schema.organizations)
     .innerJoin(schema.plans, eq(schema.plans.id, schema.organizations.planId))
-    .where(eq(schema.organizations.id, orgId));
+    .where(eq(schema.organizations.id, billingOrgId));
   if (!row) throw new AppError("not_found", "Plano da conta não encontrado.");
   return row.plan;
 }
 
+/** Lojas, pessoas (distintas) e convites pendentes do grupo de cobrança. */
 export async function orgUsage(orgId: string, db: Executor = getDb()) {
-  const [stores] = await db.select({ n: count() }).from(schema.stores).where(and(eq(schema.stores.orgId, orgId), isNull(schema.stores.deletedAt)));
-  const [members] = await db.select({ n: count() }).from(schema.memberships).where(eq(schema.memberships.orgId, orgId));
+  const { orgIds } = await billingGroup(orgId, db);
+  const [stores] = await db.select({ n: count() }).from(schema.stores).where(and(inArray(schema.stores.orgId, orgIds), isNull(schema.stores.deletedAt)));
+  const [members] = await db.select({ n: countDistinct(schema.memberships.userId) }).from(schema.memberships).where(inArray(schema.memberships.orgId, orgIds));
   const [invites] = await db.select({ n: count() }).from(schema.invitations).where(and(
-    eq(schema.invitations.orgId, orgId), isNull(schema.invitations.acceptedAt), isNull(schema.invitations.revokedAt), gt(schema.invitations.expiresAt, new Date())));
+    inArray(schema.invitations.orgId, orgIds), isNull(schema.invitations.acceptedAt), isNull(schema.invitations.revokedAt), gt(schema.invitations.expiresAt, new Date())));
   return { stores: stores!.n, members: members!.n, pendingInvitations: invites!.n };
 }
 
@@ -68,13 +84,14 @@ export function monthStartBrt(now = new Date()): Date {
 
 export type UsageKind = "exports" | "storage" | "ai_credit" | "video_second";
 
-/** Consumo do mês e armazenamento total da conta. */
+/** Consumo do mês e armazenamento total do grupo de cobrança (conta, ou agência + clientes). */
 export async function monthlyUsage(orgId: string, db: Executor = getDb(), now = new Date()) {
   const since = monthStartBrt(now);
-  const [exp] = await db.select({ n: count() }).from(schema.exportJobs).where(and(eq(schema.exportJobs.orgId, orgId), gte(schema.exportJobs.createdAt, since)));
-  const [bytes] = await db.select({ total: sum(schema.assets.bytes) }).from(schema.assets).where(eq(schema.assets.orgId, orgId));
+  const { orgIds } = await billingGroup(orgId, db);
+  const [exp] = await db.select({ n: count() }).from(schema.exportJobs).where(and(inArray(schema.exportJobs.orgId, orgIds), gte(schema.exportJobs.createdAt, since)));
+  const [bytes] = await db.select({ total: sum(schema.assets.bytes) }).from(schema.assets).where(inArray(schema.assets.orgId, orgIds));
   const rows = await db.select({ kind: schema.usageEvents.kind, total: sum(schema.usageEvents.quantity) }).from(schema.usageEvents)
-    .where(and(eq(schema.usageEvents.orgId, orgId), gte(schema.usageEvents.createdAt, since))).groupBy(schema.usageEvents.kind);
+    .where(and(inArray(schema.usageEvents.orgId, orgIds), gte(schema.usageEvents.createdAt, since))).groupBy(schema.usageEvents.kind);
   const byKind = Object.fromEntries(rows.map((r) => [r.kind, Number(r.total ?? 0)]));
   return {
     exportsThisMonth: exp!.n,
