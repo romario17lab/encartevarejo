@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button, Dialog, Input, Textarea, toast } from "@/components/ui";
 import { StatusBadge } from "@/components/app/common";
 import type { CampaignStatus, Permission } from "@/domain/campaign";
-import { api, type CampaignCore } from "@/lib/client/api";
+import { api, ApiError, type CampaignCore } from "@/lib/client/api";
 import { fmtDateTime } from "@/lib/client/format";
 
 type Action = "submit" | "approve" | "reject" | "publish" | "schedule" | "unpublish" | "end";
@@ -31,19 +31,25 @@ export function WorkflowBar({ campaign, can, hasErrors, beforeAction, afterActio
   const [reason, setReason] = useState("");
   const [schedOpen, setSchedOpen] = useState(false);
   const [when, setWhen] = useState("");
+  const [serverError, setServerError] = useState<{ message: string; issues: string[] } | null>(null);
   const actions = BY_STATUS[campaign.status].filter((a) => can(PERM[a]));
   const approvedOnce = campaign.approvedVersion != null;
   const needsReapproval = campaign.needsReapproval ?? (approvedOnce && campaign.approvedHash != null && campaign.contentHash != null && campaign.approvedHash !== campaign.contentHash);
 
   const run = async (a: Action, body: Record<string, unknown> = {}) => {
-    setBusy(a);
+    setBusy(a); setServerError(null);
     try {
       await beforeAction();
       await api.post(`/api/campaigns/${campaign.id}/${a}`, body);
       toast(({ submit: "Enviada para revisão.", approve: "Campanha aprovada.", reject: "Campanha reprovada e devolvida para edição.", publish: "Campanha publicada.", schedule: "Publicação agendada.", unpublish: "Campanha retirada da vitrine.", end: "Campanha encerrada." } as const)[a], "success");
       setRejectOpen(false); setSchedOpen(false); setReason("");
       await afterAction();
-    } catch (e) { toast((e as Error).message, "error"); }
+    } catch (e) {
+      const issues = e instanceof ApiError && e.details && typeof e.details === "object" && Array.isArray((e.details as { issues?: unknown }).issues)
+        ? ((e.details as { issues: Array<{ message?: string }> }).issues).map((i) => i.message ?? "").filter(Boolean) : [];
+      setServerError({ message: (e as Error).message, issues });
+      setRejectOpen(false); setSchedOpen(false);
+    }
     finally { setBusy(null); }
   };
 
@@ -67,6 +73,12 @@ export function WorkflowBar({ campaign, can, hasErrors, beforeAction, afterActio
         <p role="note" className={`rounded-xl px-3 py-2 text-xs ${needsReapproval ? "bg-warning/15 font-semibold" : "bg-brand-soft"}`}>
           {needsReapproval ? "Houve alterações de produtos, preços, condições ou datas depois da aprovação. É preciso aprovar de novo antes de publicar ou exportar." : "Alterações de preço após a aprovação exigem nova aprovação."}
         </p>
+      )}
+      {serverError && (
+        <div role="alert" className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs">
+          <div className="flex justify-between gap-2"><p className="font-semibold text-danger">{serverError.message}</p><button className="text-ink-muted underline" onClick={() => setServerError(null)}>Fechar</button></div>
+          {serverError.issues.length > 0 && <ul className="mt-1 list-inside list-disc">{serverError.issues.slice(0, 8).map((m) => <li key={m}>{m}</li>)}</ul>}
+        </div>
       )}
       {hasErrors && actions.some((a) => a !== "reject" && a !== "unpublish" && a !== "end") && <p className="text-xs text-danger">Há erros na lista de Avisos (preços, unidades ou datas). Corrija-os para continuar.</p>}
 

@@ -21,7 +21,7 @@ import { ExportDialog } from "./ExportDialog";
 import { ItemProperties } from "./ItemProperties";
 import { ItemsPanel } from "./ItemsPanel";
 import { PiecePanel } from "./PiecePanel";
-import { FormatTabs, PreviewPane } from "./PreviewPane";
+import { AllFormatsGrid, FormatTabs, PreviewPane } from "./PreviewPane";
 import { ProductPicker } from "./ProductPicker";
 import { docFromState, docKey, effectiveOverrides, getPiece, moveItem, renumber, useEditorDoc, withPiece, type EditorDoc } from "./state";
 import { TemplateGallery, useTemplates } from "./TemplateGallery";
@@ -90,6 +90,7 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
   const [mobileTab, setMobileTab] = useState<MobileTab>(initialTab === "previa" ? "previa" : "itens");
   const [sideTab, setSideTab] = useState<SideTab>("campanha");
   const [overflow, setOverflow] = useState<LayoutWarning[]>([]);
+  const [showAll, setShowAll] = useState(false);
   const [dlg, setDlg] = useState<null | "add" | "template" | "versions" | "export" | "menu" | "item">(null);
   const [addSel, setAddSel] = useState<Product[]>([]);
   const [conflict, setConflict] = useState(false);
@@ -273,8 +274,16 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
     <ErrorState title="Modelo indisponível" message={`O modelo ${tplInfo.name || tplInfo.id} (versão ${tplInfo.version}) não está disponível neste aplicativo. Troque o modelo.`} />
   ) : (
     <div className="flex h-full flex-col gap-2">
-      <FormatTabs value={format} onChange={(f) => { setFormat(f); setPage(0); }} warnings={warnPerFormat} disabledFormats={FORMAT_IDS.filter((f) => !enabledFormats.includes(f))} />
-      {!supported ? <p className="rounded-xl bg-warning/10 p-4 text-sm">O modelo “{template.name}” não tem o formato {FORMATS[format].label}.</p> : (
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1"><FormatTabs value={format} onChange={(f) => { setFormat(f); setPage(0); setShowAll(false); }} warnings={warnPerFormat} disabledFormats={FORMAT_IDS.filter((f) => !enabledFormats.includes(f))} /></div>
+        <button type="button" aria-pressed={showAll} onClick={() => setShowAll((v) => !v)} className={cx("shrink-0 rounded-lg border px-3 py-2 text-sm font-semibold", showAll ? "border-ink bg-ink text-white" : "border-line bg-surface")}>Todas</button>
+      </div>
+      {showAll ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <AllFormatsGrid campaign={deferredCampaign} template={template} formats={enabledFormats.filter((f) => template.supportedFormats.includes(f))}
+            overridesFor={(f) => effectiveOverrides(deferredDoc, f)} layouts={layouts} warnings={warnPerFormat} onPick={(f) => { setFormat(f); setPage(0); setShowAll(false); }} />
+        </div>
+      ) : !supported ? <p className="rounded-xl bg-warning/10 p-4 text-sm">O modelo “{template.name}” não tem o formato {FORMATS[format].label}.</p> : (
         <PreviewPane campaign={deferredCampaign} onCellClick={selectItem} template={template} format={format} overrides={effectiveOverrides(doc, format)} layout={layouts[format] ?? null}
           pageIndex={page} onPageChange={setPage} onOverflow={setOverflow} names={names} height={height} />
       )}

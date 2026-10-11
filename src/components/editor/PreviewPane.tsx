@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { Badge, cx } from "@/components/ui";
 import type { PieceOverrides, RenderCampaign } from "@/domain/campaign";
 import { FORMAT_IDS, FORMATS, type FormatId } from "@/domain/formats";
@@ -26,7 +26,8 @@ export function FormatTabs({ value, onChange, warnings, disabledFormats }: { val
   );
 }
 
-export function PreviewPane({ campaign, template, format, overrides, layout, pageIndex, onPageChange, onOverflow, names, height }: {
+export function PreviewPane({ campaign, template, format, overrides, layout, pageIndex, onPageChange, onOverflow, names, height, onCellClick }: {
+  onCellClick?: (itemId: string) => void;
   campaign: RenderCampaign; template: TemplateRef; format: FormatId; overrides: PieceOverrides; layout: LayoutResult | null;
   pageIndex: number; onPageChange: (p: number) => void; onOverflow: (w: LayoutWarning[]) => void; names: Record<string, string>; height: string;
 }) {
@@ -52,7 +53,9 @@ export function PreviewPane({ campaign, template, format, overrides, layout, pag
         )}
         {overflow.length > 0 && <Badge tone="warning">{overflow.length} problema(s) de encaixe</Badge>}
       </div>
-      <div className="min-h-0 flex-1 rounded-2xl bg-ink/5 p-2 sm:p-4" style={height === "100%" ? undefined : { height, flex: "none" }}>
+      {/* tocar num produto da prévia abre o editor dele (a lista e o teclado continuam disponíveis) */}
+      <div className={cx("min-h-0 flex-1 rounded-2xl bg-ink/5 p-2 sm:p-4", onCellClick && "[&_[data-ev-cell]]:cursor-pointer")} style={height === "100%" ? undefined : { height, flex: "none" }}
+        onClick={(e) => { const id = (e.target as HTMLElement).closest("[data-ev-cell]")?.getAttribute("data-ev-cell"); if (id && onCellClick) onCellClick(id); }}>
         <div className="h-full">
         <ScaledPreview width={f.widthPx} height={f.heightPx} fit="contain" contentRef={ref}
           label={`Prévia: ${f.label}, página ${page + 1} de ${total}`} style={{ height: "100%" }}>
@@ -63,3 +66,31 @@ export function PreviewPane({ campaign, template, format, overrides, layout, pag
     </div>
   );
 }
+
+/** Todas as peças lado a lado (primeira página de cada), para comparar formatos. Toque abre o formato. */
+export const AllFormatsGrid = memo(function AllFormatsGrid({ campaign, template, formats, overridesFor, layouts, onPick, warnings }: {
+  campaign: RenderCampaign; template: TemplateRef; formats: FormatId[]; overridesFor: (f: FormatId) => PieceOverrides;
+  layouts: Partial<Record<FormatId, LayoutResult | null>>; onPick: (f: FormatId) => void; warnings: Partial<Record<FormatId, number>>;
+}) {
+  return (
+    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {formats.map((f) => {
+        const spec = FORMATS[f];
+        const pages = layouts[f]?.pages.length ?? 1;
+        return (
+          <li key={f}>
+            <button type="button" onClick={() => onPick(f)} className="flex w-full flex-col gap-1 rounded-xl border border-line bg-surface p-2 text-left hover:border-brand">
+              <div className="w-full overflow-hidden rounded-lg bg-ink/5">
+                <ScaledPreview width={spec.widthPx} height={spec.heightPx} label={`Miniatura: ${spec.label}`}>
+                  <PieceRenderer campaign={campaign} template={template} format={spec} overrides={overridesFor(f)} layout={layouts[f] ?? undefined} pageIndex={0} />
+                </ScaledPreview>
+              </div>
+              <span className="text-xs font-semibold">{SHORT[f]}{pages > 1 && <span className="font-normal text-ink-muted"> · {pages} págs.</span>}</span>
+              {!!warnings[f] && <span className="text-[11px] text-ink-muted">{warnings[f]} aviso(s)</span>}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+});

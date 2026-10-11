@@ -11,7 +11,7 @@ async function setup(request: APIRequestContext) {
     ids.push(p.id ?? p.product.id);
   }
   const tpl = (await (await request.get("/api/templates")).json()).templates[0];
-  const st = await (await request.post("/api/campaigns", { data: { storeId: me.stores[0].id, name: "Campanha editor", templateId: tpl.id, productIds: ids } })).json();
+  const st = await (await request.post("/api/campaigns", { data: { storeId: me.stores[0].id, name: "Campanha editor", templateId: tpl.id, productIds: ids, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 5 * 864e5).toISOString() } })).json();
   return st.campaign.id as string;
 }
 
@@ -20,6 +20,18 @@ test("desfazer, conflito e rascunho", async ({ page }, info) => {
   const id = await setup(page.request);
   await page.goto(`/app/campanhas/${id}`);
   await expect(page.locator("[data-ev-render]").first()).toBeVisible({ timeout: 60_000 });
+
+  // tocar no produto na prévia abre o editor dele
+  await page.locator('section[aria-label="Prévia"] [data-ev-cell]').nth(1).click();
+  await expect(page.getByLabel(/^Nome no material/)).toHaveValue("Açúcar refinado 1kg");
+  // todas as peças lado a lado
+  await page.getByRole("button", { name: "Todas", exact: true }).click();
+  await expect(page.getByRole("img", { name: /Miniatura: Story/ })).toBeVisible();
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: "e2e-output/42-todas-pecas-1280.png" });
+  await page.getByRole("img", { name: /Miniatura: Story/ }).click();
+  await expect(page.getByRole("tab", { name: /^Story/ })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Campanha" }).click();
 
   // desfazer / refazer
   const title = page.getByLabel("Título no material");

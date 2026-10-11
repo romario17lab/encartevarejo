@@ -18,6 +18,8 @@ export default defineConfig({
     actionTimeout: 30_000,
     navigationTimeout: 120_000,
     trace: "retain-on-failure",
+    // o cadastro tem limite por IP (20/h); cada execução usa um IP de teste diferente
+    extraHTTPHeaders: { "x-forwarded-for": `10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 254) + 1}` },
     launchOptions: { executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" },
   },
   projects: [
