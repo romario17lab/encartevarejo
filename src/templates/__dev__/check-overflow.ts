@@ -4,7 +4,8 @@
 //   2. nenhum [data-ev-cell] sai da página e nenhuma célula se sobrepõe a outra;
 //   3. o conteúdo do preço não é cortado ([data-ev-price-inner] sem rolagem);
 //   4. selos de desconto e faixas de destaque ficam dentro da célula;
-//   5. título do cabeçalho e rodapé não ficam cortados verticalmente.
+//   5. título do cabeçalho e rodapé não ficam cortados verticalmente;
+//   6. o preço cobre no máximo 15% da área da foto (foto continua reconhecível).
 // Uso: npx tsx src/templates/__dev__/check-overflow.ts [--only=slug,slug] [--formats=encarte_a4,story]
 import { FORMAT_IDS, type FormatId } from "@/domain/formats";
 import type { PieceOverrides, RenderCampaign } from "@/domain/campaign";
@@ -62,6 +63,16 @@ async function main() {
               cell.querySelectorAll<HTMLElement>("[data-ev-price-inner]").forEach((el) => {
                 if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) out.push(`${id} preço cortado (${el.scrollWidth}x${el.scrollHeight} > ${el.clientWidth}x${el.clientHeight})`);
               });
+              // a foto precisa continuar reconhecível: o preço cobre no máximo 15% da área da foto
+              const photo = cell.querySelector<HTMLElement>("[data-ev-photo]");
+              const priceEl = cell.querySelector<HTMLElement>("[data-ev-price]");
+              if (photo && priceEl) {
+                const a = photo.getBoundingClientRect(), b = priceEl.getBoundingClientRect();
+                const ix = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+                const iy = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+                const ratio = a.width * a.height > 0 ? (ix * iy) / (a.width * a.height) : 0;
+                if (ratio > 0.15) out.push(`${id} preço cobre ${Math.round(ratio * 100)}% da foto`);
+              }
               // o nome não pode invadir a área do preço
               const name = cell.querySelector<HTMLElement>("[data-ev-name]");
               const price = cell.querySelector<HTMLElement>("[data-ev-price]");

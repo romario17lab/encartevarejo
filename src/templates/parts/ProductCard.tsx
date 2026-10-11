@@ -106,14 +106,15 @@ export function ProductCard({ cell, ctx }: { cell: LayoutCell; ctx: RenderCtx })
     elements.push(<PriceTag key="pr" offer={item.offer} unit={item.unit} x={pad} y={h - pad - priceH} w={iw} h={priceH} skin={skin} fontScale={fs} align="center" maxExtras={3} />);
     if (model.discount > 0) elements.push(<DiscountBadge key="bd" pct={model.discount} x={w - pad} y={photoY} size={round(S * 0.2)} skin={skin} />);
   } else if (composition === "overlay") {
-    // nome no topo (largura total), foto à esquerda e preço sobreposto ao canto inferior direito da foto
+    // nome no topo, foto à esquerda e preço no canto inferior direito, sobrepondo no máximo ~12% da foto
     const nb = nameBlock(item, iw, ih * 0.26, skin, { maxFs: nameMax, minFs: nameMin, maxLines: 2, align: "left", color: cardFg, metaColor: metaFg });
     const top = pad + nb.height + pad * 0.4;
     const restH = h - pad - top;
-    const priceW = round(iw * 0.6);
-    const priceH = round(Math.min(restH * 0.78, ih * 0.5));
+    const photoW = iw * 0.62;
+    const priceW = round(iw * 0.5);
+    const priceH = round(Math.min(restH * 0.6, ih * 0.46));
     elements.push(<div key="nm">{nb.render(pad, pad)}</div>);
-    elements.push(<ProductPhoto key="ph" item={item} x={pad} y={top} w={iw * 0.68} h={restH} bg={photoBg} radius={radius * 0.6} />);
+    elements.push(<ProductPhoto key="ph" item={item} x={pad} y={top} w={photoW} h={restH} bg={photoBg} radius={radius * 0.6} />);
     elements.push(<PriceTag key="pr" offer={item.offer} unit={item.unit} x={w - pad - priceW} y={h - pad - priceH} w={priceW} h={priceH} skin={skin} fontScale={fs} />);
     if (model.discount > 0) elements.push(<DiscountBadge key="bd" pct={model.discount} x={w - pad} y={top} size={badgeSize} skin={skin} />);
   } else {

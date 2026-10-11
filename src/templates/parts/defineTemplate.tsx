@@ -16,7 +16,7 @@ export const BASE_RULES: Record<FormatId, TemplateLayoutRules> = {
   encarte_a4: { headerRatio: { first: 0.15, continuation: 0.085 }, footerRatio: 0.075, gap: 8, padding: 10, preferredItemsPerPage: 12, maxHeroPerPage: 1, cardAspect: { min: 0.62, max: 1.7 } },
   post_quadrado: { headerRatio: { first: 0.2, continuation: 0.15 }, footerRatio: 0.14, gap: 16, padding: 20, preferredItemsPerPage: 4, maxHeroPerPage: 1, cardAspect: { min: 0.6, max: 1.8 } },
   post_feed: { headerRatio: { first: 0.18, continuation: 0.13 }, footerRatio: 0.12, gap: 16, padding: 20, preferredItemsPerPage: 6, maxHeroPerPage: 1, cardAspect: { min: 0.6, max: 1.8 } },
-  story: { headerRatio: { first: 0.21, continuation: 0.17 }, footerRatio: 0.15, gap: 18, padding: 24, preferredItemsPerPage: 4, maxHeroPerPage: 1, cardAspect: { min: 0.55, max: 2.2 } },
+  story: { headerRatio: { first: 0.21, continuation: 0.17 }, footerRatio: 0.125, gap: 18, padding: 24, preferredItemsPerPage: 4, maxHeroPerPage: 1, cardAspect: { min: 0.55, max: 2.2 } },
   cartaz_a4: { headerRatio: { first: 0.12, continuation: 0.12 }, footerRatio: 0.085, gap: 0, padding: 14, preferredItemsPerPage: 1, maxHeroPerPage: 1, cardAspect: { min: 0.4, max: 2 } },
   cartaz_a3: { headerRatio: { first: 0.12, continuation: 0.12 }, footerRatio: 0.085, gap: 0, padding: 18, preferredItemsPerPage: 1, maxHeroPerPage: 1, cardAspect: { min: 0.4, max: 2 } },
   etiqueta_a4: { headerRatio: { first: 0, continuation: 0 }, footerRatio: 0, gap: 0, padding: 0, preferredItemsPerPage: 8, maxHeroPerPage: 0, cardAspect: { min: 1.2, max: 1.7 } },

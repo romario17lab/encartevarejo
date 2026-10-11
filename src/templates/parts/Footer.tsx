@@ -6,6 +6,7 @@ import { clamp, fitOneLine, round } from "./text";
 import { ensureContrast } from "./color";
 import { AtGlyph, CalendarGlyph, ChatGlyph, ClockGlyph, GlobeGlyph, PhoneGlyph, PinGlyph } from "./glyphs";
 import { safeInner } from "./Header";
+import { Dots } from "./decor";
 import type { RenderCtx } from "./types";
 
 type Contact = { key: string; text: string; Icon: (p: { size: number; color: string }) => ReactElement };
@@ -66,6 +67,13 @@ export function Footer({ ctx, decor }: { ctx: RenderCtx; decor?: ReactElement | 
     <footer data-ev-footer="" style={{ position: "absolute", left: 0, top: 0, width: 0, height: 0 }}>
       {fs.style !== "plain" && <div style={{ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h, background: bg, borderRadius: fs.style === "card" ? Math.min(r.h * 0.18, 24) : 0 }} />}
       {decor}
+      {/* faixa da área de segurança (story: coberta pela interface do app): só ornamento, nunca texto */}
+      {fs.style !== "plain" && r.y + r.h - (inner.y + inner.h) > r.h * 0.3 && (
+        <>
+          <div style={{ position: "absolute", left: r.x, top: round(inner.y + inner.h + padY * 0.5), width: r.w, height: Math.max(2, round(r.h * 0.015)), background: accentFg, opacity: 0.6 }} />
+          <Dots x={r.x} y={inner.y + inner.h + padY * 0.5 + Math.max(2, r.h * 0.015)} w={r.w} h={r.y + r.h - (inner.y + inner.h + padY * 0.5)} color={accentFg} size={Math.max(10, r.h * 0.09)} opacity={0.22} id={`ft-dt-${accentFg.replace(/[^a-z0-9]/gi, "")}`} />
+        </>
+      )}
       <div style={{ position: "absolute", left: round(inner.x), top: round(inner.y), width: round(inner.w), height: round(inner.h), display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: round(valFs * 0.15), color: fg, fontFamily: fontStack(bf), overflow: "hidden", textAlign: "center" }}>
         <div data-ev-validity="" style={{ display: "flex", alignItems: "center", gap: round(valFs * 0.35), fontSize: valFs, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", maxWidth: "100%" }}>
           <CalendarGlyph size={round(valFs * 1.05)} color={accentFg} />
