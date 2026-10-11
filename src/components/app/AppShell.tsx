@@ -7,7 +7,7 @@ import { ROLE_LABEL } from "@/domain/campaign";
 import { api, ApiError, type Me } from "@/lib/client/api";
 import { hasPermission, MeContext, safeStorage, type MeCtx } from "@/lib/client/hooks";
 import { SubscriptionBanner } from "@/components/billing/SubscriptionBanner";
-import { IconBox, IconCalendar, IconChart, IconHistory, IconHome, IconLogout, IconMegaphone, IconMenu, IconStore, IconUser, IconUsers } from "./icons";
+import { IconBox, IconCalendar, IconChart, IconHistory, IconHome, IconSparkle, IconBriefcase, IconPlug, IconTv, IconLogout, IconMegaphone, IconMenu, IconStore, IconUser, IconUsers } from "./icons";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "EncarteVarejo";
 const STORE_KEY = "ev.storeId";
@@ -17,14 +17,18 @@ const TABS = [
   { href: "/app/campanhas", label: "Campanhas", icon: IconMegaphone },
   { href: "/app/produtos", label: "Produtos", icon: IconBox },
   { href: "/app/loja", label: "Loja", icon: IconStore },
-  { href: "/app/mais", label: "Mais", icon: IconMenu, also: ["/app/equipe", "/app/conta", "/app/calendario", "/app/metricas", "/app/filiais", "/app/historico"] },
+  { href: "/app/mais", label: "Mais", icon: IconMenu, also: ["/app/equipe", "/app/conta", "/app/calendario", "/app/metricas", "/app/filiais", "/app/historico", "/app/ia", "/app/agencia", "/app/integracoes", "/app/tv"] },
 ];
 const SIDE_EXTRA = [
   { href: "/app/calendario", label: "Calendário", icon: IconCalendar },
   { href: "/app/metricas", label: "Métricas", icon: IconChart },
+  { href: "/app/tv", label: "TV da loja", icon: IconTv },
+  { href: "/app/ia", label: "IA assistida", icon: IconSparkle },
   { href: "/app/filiais", label: "Filiais", icon: IconStore },
   { href: "/app/equipe", label: "Equipe", icon: IconUsers },
   { href: "/app/historico", label: "Histórico", icon: IconHistory, perm: "audit.read" as const },
+  { href: "/app/agencia", label: "Agência", icon: IconBriefcase, perm: "org.manage" as const },
+  { href: "/app/integracoes", label: "Integrações", icon: IconPlug, perm: "org.manage" as const },
   { href: "/app/conta", label: "Conta", icon: IconUser },
 ];
 

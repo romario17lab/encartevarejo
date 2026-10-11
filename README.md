@@ -96,6 +96,51 @@ Etapa 4 = **cobrança em testes**. Nenhuma cobrança real é feita e nada foi co
 
 **Verificação feita até aqui:** os testes automatizados (`tests/server/billing.test.ts`) usam eventos assinados localmente com o mesmo algoritmo do Stripe e uma API simulada. A integração **ainda não foi testada contra os servidores do Stripe**, porque não há credenciais de teste; esse é o passo 7 acima.
 
+## IA assistida
+
+Recursos (todos com revisão humana; nada é salvo sem confirmação):
+
+- **Extração de listas** (Produtos › Colar lista › *Extrair com IA*; atalho na importação): texto colado, foto de lista escrita à mão ou impressa, tabela de preços ou PDF (até 5 páginas, 8 MB). Volta uma tela de revisão linha a linha com confiança por campo e comparação com o catálogo (atualizar o existente ou criar outro); só as linhas marcadas "Confirmo" são salvas. Campos ausentes na fonte ficam vazios. Para texto, todo preço precisa aparecer literalmente no texto colado (senão é removido e sinalizado), e marca, tamanho, unidade e condições que não estão no texto são removidos; para foto/PDF todos os preços ficam marcados "conferir".
+- **Remoção de fundo** (formulário do produto › *Remover fundo*): cria um arquivo **novo** (origem `ia_remocao_fundo`, `parent_asset_id` = original); a foto original nunca é alterada nem apagada. O usuário compara e escolhe. Nenhuma imagem de produto é gerada.
+- **Sugestões de textos** (editor › Ações › *Sugestões da IA*): título, subtítulo, descrições curtas e legenda para WhatsApp/Instagram a partir dos dados da campanha. O modelo não recebe nem escreve preços: usa marcadores que o sistema troca pela oferta salva (formatada por `src/domain/money.ts`); qualquer outro valor em R$ é removido e sinalizado.
+- **Sugestões de campanhas** (`/app/ia`): temas e janelas de datas a partir do calendário comercial e do catálogo, com produtos já cadastrados e sem preços. *Criar rascunho* cria a campanha com os preços do catálogo.
+- **Organização dos produtos** (editor › *Sugestões da IA* › Organizar): destaques = 2–3 maiores descontos calculados dos preços reais, ordem por categoria, categoria do catálogo; a IA só sugere nomes de categoria para itens sem categoria. Cada mudança é aceita separadamente (o desfazer do editor vale).
+
+**Consumo e custos.** Cada pedido consome créditos do plano (`aiCreditsPerMonth`; 0 = não incluído): lista em texto 1, foto 2, PDF 3, remoção de fundo 1, textos 1, campanhas 1, categorias 1 (ajustável em `AI_CREDITS`). Pedidos que falham não consomem créditos. Todo pedido fica registrado em `ai_requests` (tipo, situação, modelo, créditos, resumo da entrada sem o conteúdo, resultado) e aparece em `/app/ia`. Há limite de frequência por conta (`AI_RATE_PER_MINUTE`). O custo real em dinheiro depende do contrato com cada provedor: defina os créditos dos planos de acordo.
+
+**Sem chave configurada**, cada recurso aparece como "não configurado" e o caminho manual (Ler lista, importação de planilha, editar textos à mão) continua igual.
+
+**O que o dono precisa providenciar**
+
+1. Conta na Anthropic (console.anthropic.com) com faturamento e uma chave de API → `ANTHROPIC_API_KEY`. Modelo padrão `claude-sonnet-5-5` (troque com `AI_MODEL`). Para esse modelo o sistema ativa o *fallback* do servidor da Anthropic (`AI_SERVER_FALLBACK=0` desliga): se o classificador de segurança recusar um pedido, ele é refeito em outro modelo da Anthropic.
+2. Conta no remove.bg (ou outro provedor, implementando a interface `BackgroundRemover` em `src/server/ai/background.ts`) com créditos de API → `REMOVEBG_API_KEY`.
+3. Definir os créditos de IA de cada plano na administração da plataforma.
+
+**Verificação feita até aqui:** os testes (`tests/server/ai.test.ts`) usam um provedor HTTP falso. **As integrações ainda não foram testadas contra as APIs reais da Anthropic e do remove.bg**, porque não há chaves neste ambiente.
+
+## TV da loja
+
+Recurso de plano `tv` (Profissional e Redes). Gestão em **/app/tv**; player em **/tv**.
+
+- **Telas**: cada tela pertence a uma loja, tem orientação (horizontal 1920×1080 → formato `tv_horizontal`; vertical → `story`) e segundos por slide. O status online vem do último contato do aparelho (`lastSeenAt`, a cada ~45 s).
+- **Pareamento**: a gestão mostra um código de 6 caracteres (sem letras ambíguas, vale 15 min, uso único). Na TV, abra `/tv` e digite com o controle remoto (setas + OK) ou teclado. `POST /api/tv/pair` tem limite de 10 tentativas a cada 10 min por IP.
+- **Player por link**: para TVs sem teclado, “Gerar link do player” cria `/tv/l/<token>` (mostrado uma vez). Uma tela tem um único acesso: gerar link ou parear de novo substitui o anterior; “Desconectar aparelho” revoga (para na próxima sincronização). Só o hash do token fica no banco.
+- **Programação**: campanhas publicadas/agendadas da loja (cada página da peça = um slide, renderizada pelo mesmo `PieceRenderer` da exportação) e vídeos concluídos da versão publicada. Ordem por botões, duração por item e agendamento por datas, dias da semana e faixas de horário (`08:00-12:00,17:00-21:00`), sempre no horário de Brasília.
+- **O que o aparelho recebe** (`GET /api/tv/playlist`, `Authorization: Bearer <token>`, com `ETag`/`If-None-Match`): só campanhas com status `publicada`, do instantâneo publicado e dentro da validade; itens pausados somem. Vídeos vêm por `/api/tv/media/<id>?t=` (URL assinada pela tela, com `Range`).
+- **Conexão instável**: o player guarda a última programação boa no aparelho, guarda imagens e vídeos em cache (service worker `public/tv-sw.js`, escopo `/tv`), tenta de novo com espera exponencial e mostra “Sem conexão desde HH:MM”. Agendamento e validade são avaliados no próprio aparelho: oferta vencida sai mesmo offline. Mudanças entram na próxima troca de slide, sem tela preta. Abrir o player offline (recarregar a página sem internet) exige HTTPS (service worker).
+
+## Vídeos de ofertas
+
+Botão **Vídeo** no editor da campanha (permissão `exports.create`). Gera MP4 H.264 (yuv420p, *faststart*) vertical 1080×1920 (Stories/Reels/Status) ou horizontal 1920×1080 (TV), 30 quadros/s, com a mesma identidade visual do modelo da campanha.
+
+- **Opções**: formato; animação (Deslizar, Zoom, Cortina, Subir); duração 15/30/45/60 s ou automática (máx. 60 s; destaques entram primeiro e o sistema avisa quais produtos ficaram de fora); áudio “Sem áudio”, “Trilha gerada pelo sistema” (sintetizada com ffmpeg, sem direitos de terceiros) ou “Áudio próprio” (upload de até 15 MB com confirmação obrigatória de licença); narração opcional (texto gerado dos dados, com preços por extenso, editável antes de gerar).
+- **Prévia** ao vivo na própria janela (play/pausa e barra de tempo); cada preço fica parado e legível por pelo menos 1,5 s.
+- **Fila** pg-boss `video`: `na_fila → processando → concluida | falhou`, com progresso. Até 2 novas tentativas automáticas com espera crescente; vídeos presos em `processando` (worker caiu) são recuperados ao iniciar o worker e a cada minuto. O consumo (`video_second`) é conferido antes de enfileirar (contando os vídeos ainda na fila) e registrado só quando o vídeo fica pronto.
+- **Requisitos do servidor do worker**: **ffmpeg 6+ com libx264 e aac** (e `ffprobe`) no PATH (ou `FFMPEG_PATH`/`FFPROBE_PATH`), Chromium do playwright (o mesmo da exportação) e `npm run worker` rodando. Um vídeo de 15 s em 1080×1920 leva ~50 s numa CPU comum.
+- **Variáveis**: `VIDEO_INLINE=1` (desenvolvimento: gera num processo filho sem worker; cai para `EXPORT_INLINE`), `VIDEO_FPS` (30 ou 25), `VIDEO_CONCURRENCY` (padrão 1), `VIDEO_X264_PRESET` (padrão `medium`), `FFMPEG_PATH`, `FFPROBE_PATH`.
+- **Narração (opcional)**: provedor Google Cloud Text-to-Speech (REST `text:synthesize`). Configure `GOOGLE_TTS_API_KEY` (chave de API com a Text-to-Speech API ativada) e, se quiser, `GOOGLE_TTS_VOICE` (padrão `pt-BR-Neural2-A`), `GOOGLE_TTS_ENDPOINT` e `VIDEO_TTS_PROVIDER` (`google` | `none`). Sem chave, a opção aparece como “não configurado”. **A integração ainda não foi testada contra a API real do Google** (não há chave neste ambiente); os testes usam um provedor falso.
+- Os planos precisam de minutos de vídeo (`videoMinutesPerMonth`); plano sem minutos mostra a mensagem para trocar de plano.
+
 ## Backup e recuperação
 
 - Banco: `pg_dump -Fc "$DATABASE_URL" > backup.dump`; restaurar com `pg_restore -d <novo_banco> backup.dump` e depois `npm run db:migrate`.

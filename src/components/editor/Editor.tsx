@@ -7,6 +7,9 @@ import { LoadingBlock } from "@/components/app/common";
 import { IconBack, IconDownload, IconHistory, IconMenu, IconRedo, IconShare, IconUndo } from "@/components/app/icons";
 import { SharePanel } from "@/components/campaign/SharePanel";
 import { BranchDuplicateDialog } from "@/components/branches/BranchDuplicateDialog";
+import { AiEditorMenuButton, AiEditorMount } from "@/components/ai/AiEditorDialog";
+import { PreviewLinksButton, PreviewLinksDialog } from "@/components/agency/PreviewLinksDialog";
+import { VideoMenuButton, VideoMount } from "@/components/video/VideoEntry";
 import type { CampaignItem, RenderBrand, RenderCampaign } from "@/domain/campaign";
 import { FORMAT_IDS, FORMATS, type FormatId } from "@/domain/formats";
 import { validateOffer } from "@/domain/offer";
@@ -398,16 +401,22 @@ function Editor({ initial, renderData, initialTab, storefrontBase }: { initial: 
           {can("campaigns.write") && <Button variant="secondary" onClick={() => { setDlg(null); void duplicate(); }}>Duplicar campanha</Button>}
           {can("campaigns.write") && <Button variant="secondary" onClick={() => setDlg("branches")}>Duplicar para filiais</Button>}
           {can("campaigns.write") && <Button variant="secondary" onClick={() => setDlg("template")}>Trocar modelo</Button>}
+          {can("campaigns.write") && <AiEditorMenuButton onOpen={() => setDlg(null)} />}
+          <PreviewLinksButton onOpen={() => setDlg(null)} />
+          {can("exports.create") && <VideoMenuButton onOpen={() => setDlg(null)} />}
         </div>
       </Dialog>
       <Dialog open={dlg === "share"} onClose={() => setDlg(null)} title="Divulgar campanha" size="lg">
         {dlg === "share" && <SharePanel campaignId={id} storefrontBase={storefrontBase} />}
       </Dialog>
+      <AiEditorMount campaignId={id} items={doc.items} readOnly={readOnly} beforeRun={flushOrThrow} onPatchCampaign={(p) => patchCampaign(p)} onSetItems={(its) => setItems(its)} />
       <BranchDuplicateDialog open={dlg === "branches"} onClose={() => setDlg(null)} campaignId={id} sourceStoreId={server.storeId} beforeDuplicate={flushOrThrow} />
       <VersionsDrawer open={dlg === "versions"} onClose={() => setDlg(null)} campaignId={id} currentVersion={server.version} canRestore={can("campaigns.write")}
         beforeRestore={flushOrThrow} onRestored={reload} />
       <ExportDialog open={dlg === "export"} onClose={() => setDlg(null)} campaignId={id} campaignName={doc.campaign.name} enabledFormats={enabledFormats.filter((f) => !template || template.supportedFormats.includes(f))}
         beforeExport={flushOrThrow} blockedReason={exportBlocked} />
+      <PreviewLinksDialog campaignId={id} beforeCreate={flushOrThrow} />
+      {can("exports.create") && <VideoMount campaignId={id} beforeCreate={flushOrThrow} />}
 
       <Dialog open={conflict} onClose={() => { /* precisa escolher */ }} title="Outra pessoa alterou esta campanha" size="sm"
         footer={<><Button variant="secondary" loading={busy} onClick={resolveReload}>Recarregar e descartar as minhas</Button><Button loading={busy} onClick={resolveKeepCopy}>Manter as minhas como cópia</Button></>}>
