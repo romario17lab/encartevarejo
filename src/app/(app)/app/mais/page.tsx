@@ -2,13 +2,21 @@
 import Link from "next/link";
 import { AccountSwitcher, logout } from "@/components/app/AppShell";
 import { PageHeader } from "@/components/app/common";
-import { IconLogout, IconTag, IconUpload, IconUser, IconUsers, IconCopy } from "@/components/app/icons";
+import { IconTv, IconBriefcase, IconPlug, IconSparkle, IconCalendar, IconChart, IconHistory, IconLogout, IconStore, IconTag, IconUpload, IconUser, IconUsers, IconCopy } from "@/components/app/icons";
 import { useMe } from "@/lib/client/hooks";
 
 export default function MorePage() {
   const { me, can } = useMe();
   const links = [
+    { href: "/app/calendario", label: "Calendário de campanhas", icon: IconCalendar, show: true },
+    { href: "/app/metricas", label: "Métricas", icon: IconChart, show: true },
+    { href: "/app/tv", label: "TV da loja", icon: IconTv, show: true },
+    { href: "/app/ia", label: "IA assistida", icon: IconSparkle, show: true },
+    { href: "/app/filiais", label: "Filiais e preços por filial", icon: IconStore, show: true },
     { href: "/app/equipe", label: "Equipe e convites", icon: IconUsers, show: true },
+    { href: "/app/agencia", label: "Agência e clientes", icon: IconBriefcase, show: can("org.manage") },
+    { href: "/app/integracoes", label: "Integrações e API", icon: IconPlug, show: can("org.manage") },
+    { href: "/app/historico", label: "Histórico de alterações", icon: IconHistory, show: can("audit.read") },
     { href: "/app/conta", label: "Conta e dados", icon: IconUser, show: true },
     { href: "/app/produtos/precos", label: "Atualizar preços", icon: IconTag, show: can("products.write") },
     { href: "/app/produtos/importar", label: "Importar planilha", icon: IconUpload, show: can("products.write") },

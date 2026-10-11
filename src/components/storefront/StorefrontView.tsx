@@ -13,6 +13,8 @@ export interface StorefrontViewItem {
 }
 export interface StorefrontViewData {
   slug: string; source: string | null; pageUrl: string; isDemo: boolean;
+  /** link de campanha (?campanha=): a vitrine mostra só essa campanha; aqui o endereço da vitrine completa */
+  allOffersHref?: string | null;
   store: {
     name: string; logoUrl: string | null; slogan: string | null; address: string | null; hours: string | null;
     phone: string | null; phoneDigits: string | null; whatsapp: string | null; whatsappNumber: string | null; legalText: string | null;
@@ -182,6 +184,13 @@ export function StorefrontView({ data, qrSvg }: { data: StorefrontViewData; qrSv
             {store.phone && <div><dt className="font-semibold">Telefone</dt><dd>{store.phoneDigits ? <a className="underline" href={`tel:${store.phoneDigits}`}>{store.phone}</a> : store.phone}</dd></div>}
           </dl>
         </section>
+
+        {data.allOffersHref && (
+          <p className="mt-4 rounded-2xl bg-surface p-3 text-sm shadow-card">
+            Você está vendo as ofertas de uma campanha.{" "}
+            <a href={data.allOffersHref} className="font-semibold underline">Ver todas as ofertas da loja</a>
+          </p>
+        )}
 
         {allItems.length === 0 ? (
           <section className="mt-6 rounded-2xl bg-surface p-8 text-center shadow-card">

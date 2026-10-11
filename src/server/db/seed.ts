@@ -4,6 +4,7 @@
 import { and, eq, isNull, like, sql } from "drizzle-orm";
 import { getDb, getPool, schema } from "./index";
 import { ensurePlans } from "../services/plans";
+import { ensureManualActiveSubscription } from "../services/subscriptions";
 import { commercialCalendar } from "../calendar";
 import { newId } from "../ids";
 import { randomToken } from "../signing";
@@ -131,6 +132,9 @@ async function main() {
   await ensurePlans();
   await seedCalendar();
   const password = await seedDemo();
+  // assinatura manual e ativa para a conta de demonstração (Etapa 4)
+  const demoOrgs = await getDb().select({ id: schema.organizations.id }).from(schema.organizations).where(and(eq(schema.organizations.isDemo, true), eq(schema.organizations.name, DEMO_ORG_NAME)));
+  for (const o of demoOrgs) await ensureManualActiveSubscription(o.id);
   console.log("Seed concluído: planos, calendário 2026/2027 e conta de demonstração.");
   console.log(`Conta demo: ${DEMO_EMAIL} / senha: ${password}  (gerada agora; rode o seed de novo para trocar)`);
   await getPool().end();

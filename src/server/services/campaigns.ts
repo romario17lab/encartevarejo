@@ -9,10 +9,12 @@ import type { Executor, Tx } from "../db/tx";
 import { AppError, notFound } from "../errors";
 import { newId } from "../ids";
 import { writeAudit } from "../audit";
+import { editorTemplateInfo, resolveTemplateForNewCampaign, resolveTemplateForSwitch } from "./templates";
 import { normalizeName } from "../text";
+import { assertFeature } from "./plans";
 import { canAccessStore, getAccessibleStore, requirePermission, storeScope } from "../tenant";
 import {
-  computeContentHash, computeIssues, iso, loadCampaignParts, resolveTemplate, snapshotCampaign, sortPieces, stateFingerprint, templateInfo,
+  computeContentHash, computeIssues, iso, loadCampaignParts, resolveTemplate, snapshotCampaign, sortPieces, stateFingerprint,
   type CampaignRow, type CampaignSnapshot, type SnapshotCampaign, type SnapshotPiece,
 } from "./campaign-state";
 
@@ -59,7 +61,8 @@ export async function getEditorState(ctx: TenantCtx, id: string, db: Executor = 
     campaign: { ...presentCampaign(c), needsReapproval: campaignNeedsReapproval(c) },
     items: items.map((i) => ({ ...i, imageUrl: i.imageAssetId ? `/api/assets/${i.imageAssetId}` : null })),
     pieces,
-    template: templateInfo(c.templateId, c.templateVersion),
+    // latestVersion = última versão PUBLICADA pela administração (a migração no editor é sempre explícita)
+    template: await editorTemplateInfo(c.templateId, c.templateVersion, db),
     issues,
     store: store ?? null,
   };
@@ -216,7 +219,8 @@ export async function createCampaign(ctx: TenantCtx, raw: unknown) {
   const input = createSchema.parse(raw);
   const db = getDb();
   await getAccessibleStore(ctx, input.storeId, db);
-  const tpl = resolveTemplate(input.templateId);
+  const chosen = await resolveTemplateForNewCampaign(input.templateId, db);
+  const tpl = resolveTemplate(chosen.id, chosen.version);
   const productIds = [...new Set(input.productIds ?? [])];
   const products = await loadProducts(db, ctx.orgId, productIds);
   if (products.size !== productIds.length) throw new AppError("validation", "Um ou mais produtos não foram encontrados nesta conta.");
@@ -424,7 +428,9 @@ export async function restoreVersion(ctx: TenantCtx, id: string, version: number
 export async function switchTemplate(ctx: TenantCtx, id: string, raw: unknown) {
   requirePermission(ctx, "campaigns.write");
   const input = z.object({ templateId: z.string().min(1), templateVersion: z.number().int().min(1).optional(), baseVersion: z.number().int().optional() }).parse(raw);
-  const tpl = resolveTemplate(input.templateId, input.templateVersion);
+  const cur = await getCampaignRow(ctx, id);
+  const target = await resolveTemplateForSwitch(input, { templateId: cur.templateId, templateVersion: cur.templateVersion });
+  const tpl = resolveTemplate(target.id, target.version);
   await applyState(ctx, id, input.baseVersion ?? null, { campaign: { templateId: tpl.id, templateVersion: tpl.version } }, `modelo alterado para ${tpl.name} v${tpl.version}`, "campaign.template");
   return getEditorState(ctx, id);
 }
@@ -469,6 +475,8 @@ export async function duplicateCampaign(ctx: TenantCtx, id: string, raw: unknown
   const src = await getCampaignRow(ctx, id, db);
   const { items, pieces } = await loadCampaignParts(db, ctx.orgId, id);
   const targets = input.storeIds?.length ? [...new Set(input.storeIds)] : [src.storeId];
+  // copiar para outra loja é recurso de redes (plano com "filiais")
+  if (targets.some((t) => t !== src.storeId)) await assertFeature(ctx.orgId, "filiais", db);
   const stores: Array<typeof schema.stores.$inferSelect> = [];
   for (const sid of targets) stores.push(await getAccessibleStore(ctx, sid, db));
   const created = await db.transaction(async (tx) => {

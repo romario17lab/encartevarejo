@@ -1,23 +1,39 @@
-import { and, count, eq, isNull, gt } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, gt, gte, inArray, isNull, or, sum } from "drizzle-orm";
 import { getDb, schema } from "../db";
 import type { Executor } from "../db/tx";
 import { AppError } from "../errors";
 
 export type PlanLimits = typeof schema.plans.$inferSelect["limits"];
 
+/**
+ * Grupo de cobrança: conta cliente de agência é paga pela agência ("Agência paga").
+ * O plano, a assinatura e os limites são os da agência, somados entre a agência e todos os clientes dela.
+ */
+export async function billingGroup(orgId: string, db: Executor = getDb()): Promise<{ billingOrgId: string; orgIds: string[] }> {
+  const [org] = await db.select({ agencyOrgId: schema.organizations.agencyOrgId }).from(schema.organizations).where(eq(schema.organizations.id, orgId));
+  const billingOrgId = org?.agencyOrgId ?? orgId;
+  const rows = await db.select({ id: schema.organizations.id }).from(schema.organizations)
+    .where(and(or(eq(schema.organizations.id, billingOrgId), eq(schema.organizations.agencyOrgId, billingOrgId)), isNull(schema.organizations.deletedAt)));
+  const orgIds = [...new Set([billingOrgId, orgId, ...rows.map((r) => r.id)])];
+  return { billingOrgId, orgIds };
+}
+
 export async function getOrgPlan(orgId: string, db: Executor = getDb()) {
+  const { billingOrgId } = await billingGroup(orgId, db);
   const [row] = await db.select({ plan: schema.plans }).from(schema.organizations)
     .innerJoin(schema.plans, eq(schema.plans.id, schema.organizations.planId))
-    .where(eq(schema.organizations.id, orgId));
+    .where(eq(schema.organizations.id, billingOrgId));
   if (!row) throw new AppError("not_found", "Plano da conta não encontrado.");
   return row.plan;
 }
 
+/** Lojas, pessoas (distintas) e convites pendentes do grupo de cobrança. */
 export async function orgUsage(orgId: string, db: Executor = getDb()) {
-  const [stores] = await db.select({ n: count() }).from(schema.stores).where(and(eq(schema.stores.orgId, orgId), isNull(schema.stores.deletedAt)));
-  const [members] = await db.select({ n: count() }).from(schema.memberships).where(eq(schema.memberships.orgId, orgId));
+  const { orgIds } = await billingGroup(orgId, db);
+  const [stores] = await db.select({ n: count() }).from(schema.stores).where(and(inArray(schema.stores.orgId, orgIds), isNull(schema.stores.deletedAt)));
+  const [members] = await db.select({ n: countDistinct(schema.memberships.userId) }).from(schema.memberships).where(inArray(schema.memberships.orgId, orgIds));
   const [invites] = await db.select({ n: count() }).from(schema.invitations).where(and(
-    eq(schema.invitations.orgId, orgId), isNull(schema.invitations.acceptedAt), isNull(schema.invitations.revokedAt), gt(schema.invitations.expiresAt, new Date())));
+    inArray(schema.invitations.orgId, orgIds), isNull(schema.invitations.acceptedAt), isNull(schema.invitations.revokedAt), gt(schema.invitations.expiresAt, new Date())));
   return { stores: stores!.n, members: members!.n, pendingInvitations: invites!.n };
 }
 
@@ -45,17 +61,115 @@ export async function assertUserLimit(orgId: string, db: Executor = getDb(), opt
   }
 }
 
-/** Planos padrão (sem preços: valores comerciais são definidos fora do código). */
-export const DEFAULT_PLANS: Array<{ id: string; name: string; limits: PlanLimits }> = [
-  { id: "inicial", name: "Inicial", limits: { stores: 1, users: 2, storageMb: 1024, exportsPerMonth: 200, videoMinutesPerMonth: 0, aiCreditsPerMonth: 0, features: ["vitrine", "exportacao"] } },
-  { id: "profissional", name: "Profissional", limits: { stores: 3, users: 8, storageMb: 5120, exportsPerMonth: 1000, videoMinutesPerMonth: 10, aiCreditsPerMonth: 100, features: ["vitrine", "exportacao", "agendamento", "filiais"] } },
-  { id: "redes", name: "Redes", limits: { stores: 30, users: 50, storageMb: 20480, exportsPerMonth: 5000, videoMinutesPerMonth: 60, aiCreditsPerMonth: 500, features: ["vitrine", "exportacao", "agendamento", "filiais", "aprovacao_multipla"] } },
+// ---------------- Recursos e consumo (Etapa 4) ----------------
+
+/** Recursos avançados que um plano pode incluir (limits.features). */
+export const FEATURE_LABEL: Record<string, string> = {
+  vitrine: "Vitrine online",
+  exportacao: "Exportação de arquivos",
+  agendamento: "Agendamento de campanhas",
+  filiais: "Várias filiais",
+  aprovacao_multipla: "Aprovação em várias etapas",
+  ia: "Recursos de inteligência artificial",
+  video: "Vídeos",
+  tv: "TV da loja",
+  agencia: "Modo agência",
+};
+
+/** Início do mês corrente no horário de Brasília (UTC-3, sem horário de verão). */
+export function monthStartBrt(now = new Date()): Date {
+  const brt = new Date(now.getTime() - 3 * 3600_000);
+  return new Date(Date.UTC(brt.getUTCFullYear(), brt.getUTCMonth(), 1, 3, 0, 0));
+}
+
+export type UsageKind = "exports" | "storage" | "ai_credit" | "video_second";
+
+/** Consumo do mês e armazenamento total do grupo de cobrança (conta, ou agência + clientes). */
+export async function monthlyUsage(orgId: string, db: Executor = getDb(), now = new Date()) {
+  const since = monthStartBrt(now);
+  const { orgIds } = await billingGroup(orgId, db);
+  const [exp] = await db.select({ n: count() }).from(schema.exportJobs).where(and(inArray(schema.exportJobs.orgId, orgIds), gte(schema.exportJobs.createdAt, since)));
+  const [bytes] = await db.select({ total: sum(schema.assets.bytes) }).from(schema.assets).where(inArray(schema.assets.orgId, orgIds));
+  const rows = await db.select({ kind: schema.usageEvents.kind, total: sum(schema.usageEvents.quantity) }).from(schema.usageEvents)
+    .where(and(inArray(schema.usageEvents.orgId, orgIds), gte(schema.usageEvents.createdAt, since))).groupBy(schema.usageEvents.kind);
+  const byKind = Object.fromEntries(rows.map((r) => [r.kind, Number(r.total ?? 0)]));
+  return {
+    exportsThisMonth: exp!.n,
+    storageBytes: Number(bytes?.total ?? 0),
+    aiCreditsThisMonth: byKind.ai_credit ?? 0,
+    videoSecondsThisMonth: byKind.video_second ?? 0,
+  };
+}
+
+/** Lança limit_reached se o plano não inclui o recurso. */
+export async function assertFeature(orgId: string, feature: string, db: Executor = getDb()) {
+  const plan = await getOrgPlan(orgId, db);
+  if (!plan.limits.features.includes(feature)) {
+    throw new AppError("limit_reached", `O recurso "${FEATURE_LABEL[feature] ?? feature}" não está incluído no plano ${plan.name}. Altere o plano para usar.`, { feature });
+  }
+}
+
+/**
+ * Lança limit_reached se consumir `qty` ultrapassa o limite do plano.
+ * exports: pedidos de exportação no mês · storage: bytes armazenados · ai_credit: créditos de IA no mês ·
+ * video_second: segundos de vídeo no mês (limite em minutos). Limite 0 = recurso não incluído (nunca ilimitado).
+ */
+export async function assertUsage(orgId: string, kind: UsageKind, qty = 1, db: Executor = getDb()) {
+  const plan = await getOrgPlan(orgId, db);
+  const u = await monthlyUsage(orgId, db);
+  const L = plan.limits;
+  const fail = (msg: string, limit: number, used: number) => { throw new AppError("limit_reached", msg, { kind, limit, used }); };
+  switch (kind) {
+    case "exports":
+      if (u.exportsThisMonth + qty > L.exportsPerMonth) fail(`O plano ${plan.name} permite ${L.exportsPerMonth} exportações por mês. O limite deste mês foi atingido.`, L.exportsPerMonth, u.exportsThisMonth);
+      break;
+    case "storage": {
+      const limit = L.storageMb * 1024 * 1024;
+      if (u.storageBytes + qty > limit) fail(`O armazenamento do plano ${plan.name} (${L.storageMb} MB) está cheio. Exclua arquivos antigos ou altere o plano.`, limit, u.storageBytes);
+      break;
+    }
+    case "ai_credit":
+      if (u.aiCreditsThisMonth + qty > L.aiCreditsPerMonth)
+        fail(L.aiCreditsPerMonth ? `Os créditos de IA do plano ${plan.name} (${L.aiCreditsPerMonth} por mês) acabaram neste mês.` : `O plano ${plan.name} não inclui recursos de IA.`, L.aiCreditsPerMonth, u.aiCreditsThisMonth);
+      break;
+    case "video_second": {
+      const limit = L.videoMinutesPerMonth * 60;
+      if (u.videoSecondsThisMonth + qty > limit)
+        fail(limit ? `Os minutos de vídeo do plano ${plan.name} (${L.videoMinutesPerMonth} por mês) acabaram neste mês.` : `O plano ${plan.name} não inclui vídeos.`, limit, u.videoSecondsThisMonth);
+      break;
+    }
+  }
+}
+
+/** Registra consumo de recurso pago (IA, vídeo). Exportações e armazenamento são contados nas próprias tabelas. */
+export async function recordUsage(orgId: string, kind: "ai_credit" | "video_second", quantity: number, ref: string | null = null, db: Executor = getDb()) {
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new AppError("validation", "Quantidade de consumo inválida.");
+  await db.insert(schema.usageEvents).values({ orgId, kind, quantity, ref });
+}
+
+/** Planos ativos, na ordem de exibição. */
+export async function listActivePlans(db: Executor = getDb()) {
+  return db.select().from(schema.plans).where(eq(schema.plans.isActive, true)).orderBy(asc(schema.plans.sortOrder), asc(schema.plans.id));
+}
+
+/**
+ * Planos padrão (sem preços: valores comerciais são definidos pelo dono na administração).
+ * Limites de serviços pagos (IA, vídeo) são sempre finitos — nunca ilimitados sem análise de custo.
+ */
+export const DEFAULT_PLANS: Array<{ id: string; name: string; sortOrder: number; limits: PlanLimits }> = [
+  { id: "inicial", name: "Inicial", sortOrder: 1, limits: { stores: 1, users: 2, storageMb: 1024, exportsPerMonth: 200, videoMinutesPerMonth: 0, aiCreditsPerMonth: 0, features: ["vitrine", "exportacao"] } },
+  { id: "profissional", name: "Profissional", sortOrder: 2, limits: { stores: 3, users: 8, storageMb: 5120, exportsPerMonth: 1000, videoMinutesPerMonth: 10, aiCreditsPerMonth: 100, features: ["vitrine", "exportacao", "agendamento", "filiais", "tv"] } },
+  { id: "redes", name: "Redes e Agências", sortOrder: 3, limits: { stores: 30, users: 50, storageMb: 20480, exportsPerMonth: 5000, videoMinutesPerMonth: 60, aiCreditsPerMonth: 500, features: ["vitrine", "exportacao", "agendamento", "filiais", "aprovacao_multipla", "tv", "agencia"] } },
 ];
 
-/** Garante que os planos existam (idempotente). Usado no seed e nos testes. */
+/**
+ * Garante que os planos existam (idempotente). Usado no seed e nos testes.
+ * Não sobrescreve nome, limites, preço nem id de preço de um plano já existente: depois de criados,
+ * quem ajusta é a administração da plataforma.
+ */
 export async function ensurePlans(db: Executor = getDb()) {
   for (const p of DEFAULT_PLANS) {
-    await db.insert(schema.plans).values({ id: p.id, name: p.name, limits: p.limits })
-      .onConflictDoUpdate({ target: schema.plans.id, set: { name: p.name, limits: p.limits } });
+    await db.insert(schema.plans).values({ id: p.id, name: p.name, limits: p.limits, sortOrder: p.sortOrder })
+      .onConflictDoNothing({ target: schema.plans.id });
   }
 }

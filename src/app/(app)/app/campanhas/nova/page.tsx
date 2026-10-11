@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { Badge, Button, Card, ErrorState, Input, Select, toast } from "@/components/ui";
 import { PageHeader, Thumb } from "@/components/app/common";
 import { IconDown, IconTrash, IconUp } from "@/components/app/icons";
@@ -18,8 +18,13 @@ const STEPS = ["Modelo", "Produtos", "Revisar", "Gerar"];
 type Row = { product: Product; offer: Offer; unit: Unit | null; open: boolean };
 
 function addDays(n: number) { const d = new Date(); d.setDate(d.getDate() + n); return toDateInput(d.toISOString()); }
+// ?inicio=AAAA-MM-DD&fim=AAAA-MM-DD (vindo do calendário) pré-preenche o período
+const ymdParam = (v: string | string[] | undefined) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`)) ? v : null);
 
-export default function QuickWizard() {
+export default function QuickWizard({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = use(searchParams);
+  const qStart = ymdParam(sp.inicio);
+  const qEnd = ymdParam(sp.fim);
   const router = useRouter();
   const { me, storeId } = useMe();
   const [step, setStep] = useState(0);
@@ -29,8 +34,12 @@ export default function QuickWizard() {
   const [name, setName] = useState("");
   const [nameEdited, setNameEdited] = useState(false);
   const [title, setTitle] = useState("Ofertas da Semana");
-  const [start, setStart] = useState(addDays(0));
-  const [end, setEnd] = useState(addDays(6));
+  const [start, setStart] = useState(() => qStart ?? addDays(0));
+  const [end, setEnd] = useState(() => {
+    const s0 = qStart ?? addDays(0);
+    if (qEnd && qEnd >= s0) return qEnd;
+    return qStart ? toDateInput(new Date(Date.parse(`${qStart}T12:00:00-03:00`) + 6 * 86400000).toISOString()) : addDays(6);
+  });
   const [store, setStore] = useState(storeId ?? me.stores[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

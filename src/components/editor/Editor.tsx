@@ -4,7 +4,12 @@ import { useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Button, cx, Dialog, ErrorState, Spinner, Tabs, toast } from "@/components/ui";
 import { LoadingBlock } from "@/components/app/common";
-import { IconBack, IconDownload, IconHistory, IconMenu, IconRedo, IconUndo } from "@/components/app/icons";
+import { IconBack, IconDownload, IconHistory, IconMenu, IconRedo, IconShare, IconUndo } from "@/components/app/icons";
+import { SharePanel } from "@/components/campaign/SharePanel";
+import { BranchDuplicateDialog } from "@/components/branches/BranchDuplicateDialog";
+import { AiEditorMenuButton, AiEditorMount } from "@/components/ai/AiEditorDialog";
+import { PreviewLinksButton, PreviewLinksDialog } from "@/components/agency/PreviewLinksDialog";
+import { VideoMenuButton, VideoMount } from "@/components/video/VideoEntry";
 import type { CampaignItem, RenderBrand, RenderCampaign } from "@/domain/campaign";
 import { FORMAT_IDS, FORMATS, type FormatId } from "@/domain/formats";
 import { validateOffer } from "@/domain/offer";
@@ -48,7 +53,7 @@ const FALLBACK_BRAND: RenderBrand = {
 };
 
 /** Carrega a campanha e entrega ao editor só quando os dados estão prontos. */
-export function EditorLoader({ id, initialTab }: { id: string; initialTab?: string }) {
+export function EditorLoader({ id, initialTab, storefrontBase }: { id: string; initialTab?: string; storefrontBase: string }) {
   const [state, setState] = useState<EditorState | null>(null);
   const [render, setRender] = useState<RenderCampaign | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -70,10 +75,10 @@ export function EditorLoader({ id, initialTab }: { id: string; initialTab?: stri
     </div>
   );
   if (!state) return <div className="flex min-h-dvh items-center justify-center"><LoadingBlock label="Abrindo o editor…" /></div>;
-  return <Editor key={state.campaign.id} initial={state} renderData={render} initialTab={initialTab} />;
+  return <Editor key={state.campaign.id} initial={state} renderData={render} initialTab={initialTab} storefrontBase={storefrontBase} />;
 }
 
-function Editor({ initial, renderData, initialTab }: { initial: EditorState; renderData: RenderCampaign | null; initialTab?: string }) {
+function Editor({ initial, renderData, initialTab, storefrontBase }: { initial: EditorState; renderData: RenderCampaign | null; initialTab?: string; storefrontBase: string }) {
   const router = useRouter();
   const { me, can } = useMe();
   const id = initial.campaign.id;
@@ -91,7 +96,7 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
   const [sideTab, setSideTab] = useState<SideTab>("campanha");
   const [overflow, setOverflow] = useState<LayoutWarning[]>([]);
   const [showAll, setShowAll] = useState(false);
-  const [dlg, setDlg] = useState<null | "add" | "template" | "versions" | "export" | "menu" | "item">(null);
+  const [dlg, setDlg] = useState<null | "add" | "template" | "versions" | "export" | "menu" | "item" | "share" | "branches">(initialTab === "divulgar" ? "share" : null);
   const [addSel, setAddSel] = useState<Product[]>([]);
   const [conflict, setConflict] = useState(false);
   const [draft, setDraft] = useState<DraftRecord | null>(null);
@@ -317,8 +322,9 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
           <button type="button" onClick={history.redo} disabled={!history.canRedo} aria-label="Refazer (Ctrl+Shift+Z)" title="Refazer (Ctrl+Shift+Z)" className="rounded-lg p-2 hover:bg-ink/5 disabled:opacity-30"><IconRedo size={20} /></button>
         </>}
         <button type="button" onClick={() => setDlg("versions")} aria-label="Histórico de versões" title="Histórico de versões" className="hidden rounded-lg p-2 hover:bg-ink/5 sm:block"><IconHistory size={20} /></button>
+        <Button size="sm" variant="secondary" icon={<IconShare size={16} />} onClick={() => setDlg("share")} className="hidden sm:inline-flex">Divulgar</Button>
         {can("exports.create") && <Button size="sm" icon={<IconDownload size={16} />} onClick={() => setDlg("export")} className="hidden sm:inline-flex">Exportar</Button>}
-        <button type="button" onClick={() => setDlg("menu")} aria-label="Mais ações" className="rounded-lg p-2 hover:bg-ink/5 sm:hidden"><IconMenu size={20} /></button>
+        <button type="button" onClick={() => setDlg("menu")} aria-label="Mais ações" title="Mais ações" className="rounded-lg p-2 hover:bg-ink/5"><IconMenu size={20} /></button>
       </div>
       <div className="border-t border-line px-3 py-2 lg:px-4">
         <WorkflowBar campaign={{ ...server, ...doc.campaign, status: server.status, version: server.version, contentHash: server.contentHash, approvedHash: server.approvedHash, approvedVersion: server.approvedVersion, scheduledPublishAt: server.scheduledPublishAt, publishedVersion: server.publishedVersion ?? null, needsReapproval: server.needsReapproval ?? false }}
@@ -390,15 +396,27 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
       </Dialog>
       <Dialog open={dlg === "menu"} onClose={() => setDlg(null)} title="Ações" size="sm">
         <div className="flex flex-col gap-2">
+          <Button variant="secondary" icon={<IconShare size={18} />} onClick={() => setDlg("share")}>Divulgar: link e QR code</Button>
           <Button variant="secondary" icon={<IconHistory size={18} />} onClick={() => setDlg("versions")}>Histórico de versões</Button>
           {can("campaigns.write") && <Button variant="secondary" onClick={() => { setDlg(null); void duplicate(); }}>Duplicar campanha</Button>}
+          {can("campaigns.write") && <Button variant="secondary" onClick={() => setDlg("branches")}>Duplicar para filiais</Button>}
           {can("campaigns.write") && <Button variant="secondary" onClick={() => setDlg("template")}>Trocar modelo</Button>}
+          {can("campaigns.write") && <AiEditorMenuButton onOpen={() => setDlg(null)} />}
+          <PreviewLinksButton onOpen={() => setDlg(null)} />
+          {can("exports.create") && <VideoMenuButton onOpen={() => setDlg(null)} />}
         </div>
       </Dialog>
+      <Dialog open={dlg === "share"} onClose={() => setDlg(null)} title="Divulgar campanha" size="lg">
+        {dlg === "share" && <SharePanel campaignId={id} storefrontBase={storefrontBase} />}
+      </Dialog>
+      <AiEditorMount campaignId={id} items={doc.items} readOnly={readOnly} beforeRun={flushOrThrow} onPatchCampaign={(p) => patchCampaign(p)} onSetItems={(its) => setItems(its)} />
+      <BranchDuplicateDialog open={dlg === "branches"} onClose={() => setDlg(null)} campaignId={id} sourceStoreId={server.storeId} beforeDuplicate={flushOrThrow} />
       <VersionsDrawer open={dlg === "versions"} onClose={() => setDlg(null)} campaignId={id} currentVersion={server.version} canRestore={can("campaigns.write")}
         beforeRestore={flushOrThrow} onRestored={reload} />
       <ExportDialog open={dlg === "export"} onClose={() => setDlg(null)} campaignId={id} campaignName={doc.campaign.name} enabledFormats={enabledFormats.filter((f) => !template || template.supportedFormats.includes(f))}
         beforeExport={flushOrThrow} blockedReason={exportBlocked} />
+      <PreviewLinksDialog campaignId={id} beforeCreate={flushOrThrow} />
+      {can("exports.create") && <VideoMount campaignId={id} beforeCreate={flushOrThrow} />}
 
       <Dialog open={conflict} onClose={() => { /* precisa escolher */ }} title="Outra pessoa alterou esta campanha" size="sm"
         footer={<><Button variant="secondary" loading={busy} onClick={resolveReload}>Recarregar e descartar as minhas</Button><Button loading={busy} onClick={resolveKeepCopy}>Manter as minhas como cópia</Button></>}>

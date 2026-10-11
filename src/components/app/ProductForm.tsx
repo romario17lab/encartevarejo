@@ -6,6 +6,7 @@ import type { Unit } from "@/domain/offer";
 import { api, assetUrl, type Product, type ProductInput } from "@/lib/client/api";
 import { UNIT_OPTIONS } from "@/lib/client/format";
 import { ImageUpload } from "./common";
+import { RemoveBackgroundButton } from "@/components/ai/RemoveBackgroundButton";
 
 const empty: ProductInput = {
   name: "", brand: null, category: null, sizeLabel: null, unit: null, barcode: null, imageAssetId: null,
@@ -87,6 +88,7 @@ export function ProductForm({ product, categories = [], onSaved, onCancel, minMa
       <ImageUpload label="Foto do produto" value={imageUrl}
         onUploaded={(a) => { set("imageAssetId", a.id); setImageUrl(a.url || assetUrl(a.id)); }}
         onClear={() => { set("imageAssetId", null); setImageUrl(null); }} />
+      <RemoveBackgroundButton assetId={f.imageAssetId} onChoose={(a) => { set("imageAssetId", a.id); setImageUrl(a.url); }} />
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {onCancel && <Button type="button" variant="secondary" onClick={onCancel}>Cancelar</Button>}

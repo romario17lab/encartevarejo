@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, gte, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt } from "drizzle-orm";
 import type { TenantCtx } from "../context";
 import { getDb, schema } from "../db";
 import { AppError, notFound } from "../errors";
@@ -108,11 +108,5 @@ export async function listAudit(ctx: TenantCtx, q: { entityType?: string | null;
   return { entries: page, nextCursor: rows.length > limit ? String(page[page.length - 1]!.id) : null };
 }
 
-/** Calendário comercial: eventos globais + da conta no intervalo. */
-export async function listCalendar(ctx: TenantCtx, from?: string | null, to?: string | null) {
-  const conds = [or(isNull(schema.calendarEvents.orgId), eq(schema.calendarEvents.orgId, ctx.orgId))!];
-  if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) conds.push(gte(schema.calendarEvents.date, from));
-  if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) conds.push(lte(schema.calendarEvents.date, to));
-  const rows = await getDb().select().from(schema.calendarEvents).where(and(...conds)).orderBy(schema.calendarEvents.date);
-  return rows.map((r) => ({ id: r.id, name: r.name, date: r.date, isMovable: r.isMovable, note: r.note, scope: r.orgId ? "conta" : "global" }));
-}
+/** Calendário comercial: movido para ./calendar-events (mantido aqui por compatibilidade de importação). */
+export { listCalendar } from "./calendar-events";

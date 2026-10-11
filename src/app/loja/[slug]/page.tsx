@@ -65,15 +65,22 @@ export default async function LojaPage({ params, searchParams }: { params: Promi
   if (!sf) notFound();
 
   const source = first(sp.utm_source) ?? first(sp.origem);
+  // ?campanha=<id>: link de uma campanha. Se ela estiver no ar, a vitrine mostra só as ofertas dela;
+  // senão mostra a vitrine completa (comportamento normal). A visita é atribuída à campanha do link.
+  const requestedCampaign = first(sp.campanha);
+  const focused = requestedCampaign ? sf.campaigns.find((cp) => cp.id === requestedCampaign) ?? null : null;
+  const shownCampaigns = focused ? [focused] : sf.campaigns;
   // contagem de visualizações: limite leve por IP+loja; nunca impede a página de abrir
+  let ip = "desconhecido";
+  try { ip = clientIp({ headers: await headers() } as unknown as Request); } catch { /* fora de uma requisição (testes) */ }
   try {
-    const h = await headers();
-    hitRateLimit(`sf-view:${clientIp({ headers: h } as unknown as Request)}:${slug}`, 120, 60 * 1000);
-    await recordStorefrontEvent(slug, "view", { source, campaignId: sf.campaigns.length === 1 ? sf.campaigns[0]!.id : null });
+    hitRateLimit(`sf-view:${ip}:${slug}`, 120, 60 * 1000);
+    await recordStorefrontEvent(slug, "view", { source, campaignId: requestedCampaign ?? (sf.campaigns.length === 1 ? sf.campaigns[0]!.id : null) });
   } catch { /* limite atingido ou falha de registro: a vitrine continua */ }
 
   const pageUrl = appUrl(`/loja/${sf.store.slug}`);
-  const qrSvg = await QRCode.toString(pageUrl, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#111827", light: "#ffffff" } });
+  // QR impresso/exibido na vitrine leva origem=qr para aparecer nas métricas de acesso por QR
+  const qrSvg = await QRCode.toString(`${pageUrl}?origem=qr`, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#111827", light: "#ffffff" } });
 
   const c = sf.brand.colors;
   const primary = safeHex(c?.primary, "#166534");
@@ -96,7 +103,8 @@ export default async function LojaPage({ params, searchParams }: { params: Promi
       legalText: sf.brand.legalText,
     },
     colors: { primary, onPrimary: onColor(primary), price: readableOnWhite(accent, readableOnWhite(primary)) },
-    campaigns: sf.campaigns.map((cp) => ({
+    allOffersHref: focused && sf.campaigns.length > 1 ? `/loja/${sf.store.slug}${source ? `?origem=${encodeURIComponent(source)}` : ""}` : null,
+    campaigns: shownCampaigns.map((cp) => ({
       id: cp.id,
       title: cp.title,
       subtitle: cp.subtitle,

@@ -1,5 +1,5 @@
 import sharp, { type Metadata, type OutputInfo } from "sharp";
-import { and, eq, sum } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { TenantCtx } from "../context";
 import { getDb, schema } from "../db";
 import { AppError, forbidden, notFound } from "../errors";
@@ -9,7 +9,7 @@ import { sha256 } from "../signing";
 import { storage } from "../storage";
 import { writeAudit } from "../audit";
 import { signedAssetUrl, verifyAssetToken } from "../assets";
-import { getOrgPlan } from "./plans";
+import { assertUsage } from "./plans";
 
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const MAX_INPUT_DIM = 6000;
@@ -52,11 +52,8 @@ export async function uploadImage(ctx: TenantCtx, input: UploadInput) {
   const [dupe] = await db.select().from(schema.assets).where(and(eq(schema.assets.orgId, ctx.orgId), eq(schema.assets.sha256, hash), eq(schema.assets.kind, "image")));
   if (dupe) return { id: dupe.id, url: `/api/assets/${dupe.id}`, width: dupe.width, height: dupe.height, mime: dupe.mime, deduplicated: true };
 
-  // limite de armazenamento do plano
-  const plan = await getOrgPlan(ctx.orgId);
-  const [used] = await db.select({ total: sum(schema.assets.bytes) }).from(schema.assets).where(eq(schema.assets.orgId, ctx.orgId));
-  if (Number(used?.total ?? 0) + data.length > plan.limits.storageMb * 1024 * 1024)
-    throw new AppError("limit_reached", `O armazenamento do plano ${plan.name} (${plan.limits.storageMb} MB) está cheio. Exclua arquivos antigos ou altere o plano.`);
+  // limite de armazenamento do plano (soma dos bytes dos arquivos da conta)
+  await assertUsage(ctx.orgId, "storage", data.length);
 
   const keepPng = meta.format === "png" && meta.hasAlpha === true;
   let pipeline = sharp(data, { failOn: "error" }).rotate().resize({ width: MAX_OUTPUT_DIM, height: MAX_OUTPUT_DIM, fit: "inside", withoutEnlargement: true });
