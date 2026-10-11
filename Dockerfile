@@ -1,5 +1,6 @@
 # Imagem única: aplicação web + worker (exportações, vídeos e agendamentos) no mesmo container,
-# compartilhando a pasta de arquivos (STORAGE_DIR). Veja docs/07-hospedagem.md.
+# compartilhando a pasta de arquivos (STORAGE_DIR). O volume persistente é configurado na hospedagem
+# (montado em /data; o Railway não aceita a instrução VOLUME). Veja docs/07-hospedagem.md.
 ARG BASE_IMAGE=node:22-bookworm-slim
 FROM ${BASE_IMAGE}
 
@@ -26,6 +27,5 @@ RUN APP_URL=$APP_URL NEXT_PUBLIC_BRAND_NAME=$NEXT_PUBLIC_BRAND_NAME npm run buil
 
 ENV NODE_ENV=production
 EXPOSE 3000
-VOLUME ["/data"]
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["scripts/start-production.sh"]
