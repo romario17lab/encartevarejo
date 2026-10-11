@@ -19,7 +19,7 @@
   --ev-surface: 255 255 255;
   --ev-surface-alt: 246 247 242;  /* #F6F7F2 papel */
   --ev-line: 223 227 218;         /* #DFE3DA divisórias decorativas */
-  --ev-line-strong: 122 133 127;  /* #7A857F borda de campos — 3,74:1 sobre branco (WCAG 1.4.11) */
+  --ev-line-strong: 122 133 127;  /* #7A857F borda de campos — 3,83:1 sobre branco (WCAG 1.4.11) */
   --ev-success: 21 128 61;        /* #15803D — 5,02:1 */
   --ev-warning: 161 92 7;         /* #A15C07 — 5,19:1 */
   --ev-danger: 198 40 40;         /* #C62828 — 5,62:1 */

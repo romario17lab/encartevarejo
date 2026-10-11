@@ -18,7 +18,6 @@ const FIELDS: Array<{ key: string; label: string; required?: boolean; price?: bo
   { key: "regularCents", label: "Preço normal", price: true },
   { key: "promoCents", label: "Preço promocional", price: true },
   { key: "costCents", label: "Custo (privado)", price: true },
-  { key: "conditions", label: "Condições" },
 ];
 const STEPS = ["Arquivo", "Colunas", "Conferir", "Resultado"];
 type Mapping = Record<string, string | null>;

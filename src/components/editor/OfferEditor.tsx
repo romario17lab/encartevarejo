@@ -1,5 +1,5 @@
 "use client";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Input, PriceInput, cx } from "@/components/ui";
 import { describeOffer, PRICE_MODES, validateOffer, type Offer, type OfferIssue, type PriceMode, type Unit } from "@/domain/offer";
 import { discountPercent } from "@/domain/money";
@@ -83,5 +83,23 @@ export function OfferEditor({ offer, unit, onChange, costCents, minMarginBp, dis
         {issues.filter((i) => i.level === "warning").map((i) => <p key={i.message} className="text-sm text-ink">⚠ {i.message}</p>)}
       </div>
     </fieldset>
+  );
+}
+
+/** "Mecânica padrão da campanha": aplica um tipo de oferta a todos os produtos de uma vez. */
+export function DefaultMechanic({ onApply, disabled, count }: { onApply: (m: PriceMode) => void; disabled?: boolean; count: number }) {
+  const uid = useId();
+  const [mode, setMode] = useState<PriceMode>("simple");
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
+      <label htmlFor={`${uid}-dm`} className="text-sm font-semibold">Mecânica padrão da campanha</label>
+      <div className="flex gap-2">
+        <select id={`${uid}-dm`} value={mode} disabled={disabled} onChange={(e) => setMode(e.target.value as PriceMode)} className="h-10 min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 text-sm">
+          {PRICE_MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}
+        </select>
+        <button type="button" disabled={disabled || !count} onClick={() => onApply(mode)} className="h-10 shrink-0 rounded-lg bg-ink px-3 text-sm font-semibold text-white disabled:opacity-40">Aplicar a todos</button>
+      </div>
+      <p className="text-xs text-ink-muted">Os valores já informados são mantidos. Depois, ajuste as exceções em cada produto. Itens sem o dado necessário (ex.: preço anterior) aparecem com erro.</p>
+    </div>
   );
 }

@@ -9,8 +9,8 @@ function Background({ colors, w, h, page }: DecorProps) {
   const r = page.header;
   return (
     <>
-      <div style={{ position: "absolute", right: -S * 0.2, top: -S * 0.3, width: S * 0.46, height: S * 0.46, borderRadius: "50%", border: `${Math.max(2, S * 0.05)}px solid ${alpha(colors.accent, 0.9)}` }} />
-      <div style={{ position: "absolute", right: S * 0.03, top: Math.max(4, r.h * 0.04) + S * 0.14, width: S * 0.035, height: S * 0.035, borderRadius: "50%", background: colors.primary }} />
+      <div style={{ position: "absolute", left: -S * 0.32, bottom: -S * 0.3, width: S * 0.62, height: S * 0.62, borderRadius: "50%", border: `${Math.max(2, S * 0.05)}px solid ${alpha(colors.accent, 0.9)}` }} />
+      <div style={{ position: "absolute", left: S * 0.018, top: Math.max(4, r.h * 0.12), width: S * 0.03, height: S * 0.03, borderRadius: "50%", background: colors.primary }} />
     </>
   );
 }

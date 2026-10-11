@@ -32,6 +32,17 @@ test("demais telas carregam e os fluxos de colar lista e preços em massa funcio
   await dlg.getByRole("button", { name: /^Confirmar/ }).click();
   await expect(page.getByText(/preço atualizado/)).toBeVisible();
 
+  // importação de planilha CSV
+  await page.goto("/app/produtos/importar");
+  await page.locator("#import-file").setInputFiles({ name: "produtos.csv", mimeType: "text/csv", buffer: Buffer.from("Produto;Preço;Unidade;Categoria\nArroz 5kg;24,90;pct;Mercearia\nFeijão 1kg;7,49;pct;Mercearia\n", "utf8") });
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(page.getByLabel(/^Nome do produto/)).toHaveValue("Produto");
+  await page.screenshot({ path: `${OUT}/32-importar-colunas-${sfx}.png`, fullPage: true });
+  await page.getByRole("button", { name: "Conferir dados" }).click();
+  await page.screenshot({ path: `${OUT}/33-importar-conferir-${sfx}.png`, fullPage: true });
+  await page.getByRole("button", { name: /^Importar 2 linhas/ }).click();
+  await expect(page.getByText("Importação concluída")).toBeVisible();
+
   for (const [path, name, heading] of [
     ["/app", "22-inicio", /Olá, Telas/],
     ["/app/campanhas", "23-campanhas", "Campanhas"],

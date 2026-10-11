@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Button, cx, Dialog, ErrorState, Spinner, Tabs, toast } from "@/components/ui";
 import { LoadingBlock } from "@/components/app/common";
 import { IconBack, IconDownload, IconHistory, IconMenu, IconRedo, IconUndo } from "@/components/app/icons";
@@ -12,7 +12,7 @@ import type { LayoutResult, LayoutWarning } from "@/templates/contract";
 import { getTemplate } from "@/templates/registry";
 import { computePieceLayout } from "@/render/PieceRenderer";
 import { api, ApiError, duplicatedId, type DuplicateResult, type CampaignCore, type EditorState, type Product, type TemplateMeta } from "@/lib/client/api";
-import { buildRenderCampaign, itemFromProduct, newItemId } from "@/lib/client/campaign";
+import { applyModeToAll, buildRenderCampaign, itemFromProduct, mixedMechanicsWarning, newItemId } from "@/lib/client/campaign";
 import { fmtTime } from "@/lib/client/format";
 import { useMe } from "@/lib/client/hooks";
 import { CampaignPanel } from "./CampaignPanel";
@@ -159,27 +159,34 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
     id, version: server.version, title: doc.campaign.title, subtitle: doc.campaign.subtitle, startsAt: doc.campaign.startsAt, endsAt: doc.campaign.endsAt,
     validityNote: doc.campaign.validityNote, items: doc.items, brand, legalText,
   }), [id, server.version, doc.campaign, doc.items, brand, legalText]);
+  // prévia e layout seguem o estado com prioridade baixa: digitar continua fluido em aparelhos fracos
+  const deferredCampaign = useDeferredValue(renderCampaign);
+  const deferredDoc = useDeferredValue(doc);
   const layouts = useMemo(() => {
     const out: Partial<Record<FormatId, LayoutResult | null>> = {};
     if (!template) return out;
     for (const f of FORMAT_IDS) {
-      if (!getPiece(doc, f).enabled && f !== format) continue;
-      try { out[f] = computePieceLayout(renderCampaign, template, f, effectiveOverrides(doc, f)); } catch { out[f] = null; }
+      if (!getPiece(deferredDoc, f).enabled && f !== format) continue;
+      try { out[f] = computePieceLayout(deferredCampaign, template, f, effectiveOverrides(deferredDoc, f)); } catch { out[f] = null; }
     }
     return out;
-  }, [renderCampaign, template, doc, format]);
+  }, [deferredCampaign, template, deferredDoc, format]);
   const names = useMemo(() => Object.fromEntries(doc.items.map((i) => [i.id, i.name])), [doc.items]);
   const minMarginBp = me.org.settings?.minMarginBp ?? null;
 
   const warnings: WarningEntry[] = useMemo(() => {
     const w: WarningEntry[] = [];
-    if (!doc.items.length) w.push({ level: "error", message: "A campanha não tem produtos.", source: "oferta" });
+    if (!doc.items.some((i) => !i.paused)) w.push({ level: "error", message: "Adicione pelo menos um produto à campanha.", source: "oferta" });
     for (const it of doc.items) {
       if (!it.name.trim()) w.push({ level: "error", message: "Produto sem nome.", itemId: it.id, source: "oferta" });
       for (const iss of validateOffer(it.offer, { unit: it.unit })) w.push({ level: iss.level, message: iss.message, itemId: it.id, source: "oferta" });
     }
-    if (doc.campaign.startsAt && doc.campaign.endsAt && doc.campaign.endsAt < doc.campaign.startsAt) w.push({ level: "error", message: "A data final é anterior à inicial.", source: "oferta" });
-    if (!doc.campaign.endsAt) w.push({ level: "warning", message: "Informe até quando valem as ofertas.", source: "oferta" });
+    const { startsAt, endsAt } = doc.campaign;
+    if (!startsAt || !endsAt) w.push({ level: "error", message: "Informe o período de validade da campanha (aba Campanha).", source: "oferta" });
+    else if (new Date(endsAt) <= new Date(startsAt)) w.push({ level: "error", message: "A data final precisa ser depois da data inicial.", source: "oferta" });
+    else if (new Date(endsAt) < new Date()) w.push({ level: "error", message: "A validade da campanha já terminou. Ajuste as datas.", source: "oferta" });
+    const mixed = mixedMechanicsWarning(doc.items.filter((i) => !i.paused).map((i) => i.offer));
+    if (mixed) w.push({ level: "warning", message: mixed, source: "oferta" });
     const seen = new Set<string>();
     for (const f of FORMAT_IDS) {
       if (!getPiece(doc, f).enabled) continue;
@@ -268,14 +275,15 @@ function Editor({ initial, renderData, initialTab }: { initial: EditorState; ren
     <div className="flex h-full flex-col gap-2">
       <FormatTabs value={format} onChange={(f) => { setFormat(f); setPage(0); }} warnings={warnPerFormat} disabledFormats={FORMAT_IDS.filter((f) => !enabledFormats.includes(f))} />
       {!supported ? <p className="rounded-xl bg-warning/10 p-4 text-sm">O modelo “{template.name}” não tem o formato {FORMATS[format].label}.</p> : (
-        <PreviewPane campaign={renderCampaign} template={template} format={format} overrides={effectiveOverrides(doc, format)} layout={layouts[format] ?? null}
+        <PreviewPane campaign={deferredCampaign} onCellClick={selectItem} template={template} format={format} overrides={effectiveOverrides(doc, format)} layout={layouts[format] ?? null}
           pageIndex={page} onPageChange={setPage} onOverflow={setOverflow} names={names} height={height} />
       )}
     </div>
   );
   const piecePanel = <PiecePanel format={format} piece={piece} items={doc.items} baseColors={brand.colors} supported={supported} readOnly={readOnly}
     onChange={(p, key) => history.set(withPiece(doc, format, p), key)} />;
-  const campaignPanel = <CampaignPanel campaign={doc.campaign} onChange={patchCampaign} template={tplInfo} readOnly={readOnly} canWrite={can("campaigns.write")}
+  const campaignPanel = <CampaignPanel campaign={doc.campaign} onChange={patchCampaign} itemCount={doc.items.length}
+    onApplyMode={(m) => { history.set({ ...doc, items: applyModeToAll(doc.items, m) }); toast("Mecânica aplicada a todos os produtos. Use Desfazer para voltar.", "info"); }} template={tplInfo} readOnly={readOnly} canWrite={can("campaigns.write")}
     onSwitchTemplate={() => setDlg("template")} onDuplicate={duplicate}
     onMigrate={() => switchTemplate({ id: tplInfo.id, version: tplInfo.latestVersion, name: tplInfo.name }, tplInfo.latestVersion)} />;
   const warningsPanel = <WarningsPanel warnings={warnings} itemNames={names} onSelectItem={selectItem} onSelectFormat={(f) => { setFormat(f); setPage(0); if (!isDesktop) setMobileTab("previa"); }} />;

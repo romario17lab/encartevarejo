@@ -4,13 +4,13 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Card, ErrorState, Input, Select, toast } from "@/components/ui";
 import { PageHeader, Thumb } from "@/components/app/common";
 import { IconDown, IconTrash, IconUp } from "@/components/app/icons";
-import { OfferEditor } from "@/components/editor/OfferEditor";
+import { DefaultMechanic, OfferEditor } from "@/components/editor/OfferEditor";
 import { ProductPicker } from "@/components/editor/ProductPicker";
 import { TemplateGallery } from "@/components/editor/TemplateGallery";
 import { describeOffer, type Offer } from "@/domain/offer";
 import type { Unit } from "@/domain/offer";
 import { api, assetUrl, type EditorState, type Product, type TemplateMeta } from "@/lib/client/api";
-import { itemErrors, offerFromProduct } from "@/lib/client/campaign";
+import { applyModeToAll, itemErrors, mixedMechanicsWarning, offerFromProduct, suggestCampaignName } from "@/lib/client/campaign";
 import { fromDateInput, toDateInput, UNIT_OPTIONS } from "@/lib/client/format";
 import { useMe } from "@/lib/client/hooks";
 
@@ -27,6 +27,7 @@ export default function QuickWizard() {
   const [selected, setSelected] = useState<Product[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [name, setName] = useState("");
+  const [nameEdited, setNameEdited] = useState(false);
   const [title, setTitle] = useState("Ofertas da Semana");
   const [start, setStart] = useState(addDays(0));
   const [end, setEnd] = useState(addDays(6));
@@ -38,11 +39,13 @@ export default function QuickWizard() {
   const goReview = () => {
     // mantém ofertas já editadas; novos produtos recebem a oferta do catálogo
     setRows((prev) => selected.map((p) => prev.find((r) => r.product.id === p.id) ?? { product: p, offer: offerFromProduct(p), unit: p.unit, open: false }));
-    if (!name) setName(`${title} ${start ? start.split("-").reverse().slice(0, 2).join("/") : ""}`.trim());
+    if (!nameEdited) setName(suggestCampaignName(start, end));
     setStep(2);
   };
   const errorsCount = useMemo(() => rows.filter((r) => itemErrors({ offer: r.offer, unit: r.unit }).length).length, [rows]);
-  const dateError = start && end && end < start ? "A data final precisa ser depois da inicial." : null;
+  const dateError = !start || !end ? "Informe o início e o fim das ofertas." : end < start ? "A data final precisa ser depois da inicial." : null;
+  const setDates = (a: string, b: string) => { setStart(a); setEnd(b); if (!nameEdited) setName(suggestCampaignName(a, b)); };
+  const mixed = mixedMechanicsWarning(rows.map((r) => r.offer));
   const move = (i: number, d: -1 | 1) => setRows((rs) => { const n = [...rs]; const j = i + d; if (j < 0 || j >= n.length) return rs; [n[i], n[j]] = [n[j], n[i]]; return n; });
 
   const generate = async () => {
@@ -101,15 +104,17 @@ export default function QuickWizard() {
         <>
           <Card className="mb-4 grid gap-3 sm:grid-cols-2">
             <Input label="Título no material" value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} />
-            <Input label="Nome interno da campanha" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} hint="Só aparece para a equipe." />
-            <Input label="Início das ofertas" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-            <Input label="Fim das ofertas" type="date" value={end} onChange={(e) => setEnd(e.target.value)} error={dateError} />
+            <Input label="Nome interno da campanha" value={name} maxLength={120} onChange={(e) => { setName(e.target.value); setNameEdited(true); }} hint="Só aparece para a equipe." />
+            <Input label="Início das ofertas" type="date" required value={start} onChange={(e) => setDates(e.target.value, end)} />
+            <Input label="Fim das ofertas" type="date" required value={end} onChange={(e) => setDates(start, e.target.value)} error={dateError} />
             {me.stores.length > 1 && <Select label="Loja" value={store} onChange={(e) => setStore(e.target.value)} options={me.stores.map((s) => ({ value: s.id, label: s.name }))} />}
           </Card>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-display text-lg font-bold">Revise as ofertas ({rows.length})</h2>
             {errorsCount > 0 ? <Badge tone="danger">{errorsCount} com pendência</Badge> : <Badge tone="success">Tudo certo</Badge>}
           </div>
+          <div className="mb-3"><DefaultMechanic count={rows.length} onApply={(m) => setRows((rs) => applyModeToAll(rs, m))} /></div>
+          {mixed && <p role="note" className="mb-3 rounded-xl border border-warning bg-warning/10 p-3 text-sm">⚠ {mixed}</p>}
           <ul className="flex flex-col gap-2">
             {rows.map((r, i) => {
               const errs = itemErrors({ offer: r.offer, unit: r.unit });

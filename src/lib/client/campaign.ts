@@ -48,3 +48,35 @@ export function buildRenderCampaign(input: {
     legalText: input.legalText, items, brand: input.brand, isDemo: !!input.isDemo,
   };
 }
+
+/** Nome sugerido a partir da validade: "Ofertas de 13 a 15/10" (nunca data/hora). */
+export function suggestCampaignName(startInput: string, endInput: string): string {
+  const p = (v: string) => { const [, m, d] = v.split("-"); return { d: String(Number(d)), m }; };
+  if (startInput && endInput) {
+    const a = p(startInput); const b = p(endInput);
+    if (startInput === endInput) return `Ofertas de ${a.d}/${a.m}`;
+    return a.m === b.m ? `Ofertas de ${a.d} a ${b.d}/${b.m}` : `Ofertas de ${a.d}/${a.m} a ${b.d}/${b.m}`;
+  }
+  return "Ofertas da Semana";
+}
+
+/**
+ * Mecânica padrão da campanha: muda o tipo de oferta de todos os itens, mantendo os valores já informados.
+ * Nada é inventado: se faltar o preço anterior (de/por) o item fica com erro e vira exceção a corrigir.
+ */
+export function applyModeToAll<T extends { offer: Offer }>(items: T[], mode: Offer["mode"]): T[] {
+  return items.map((it) => {
+    if (it.offer.mode === mode) return it;
+    const o = { ...it.offer, mode };
+    // de/por → simples: o preço anterior deixa de aparecer, mas continua guardado como preço normal
+    return { ...it, offer: o };
+  });
+}
+
+/** Aviso de mistura de mecânicas: alguns com "De/Por" e outros com preço simples. */
+export function mixedMechanicsWarning(offers: Offer[]): string | null {
+  const ft = offers.filter((o) => o.mode === "from_to").length;
+  const simple = offers.filter((o) => o.mode === "simple").length;
+  if (ft > 0 && simple > 0) return `Alguns produtos têm preço anterior (De/Por: ${ft}) e outros não (preço simples: ${simple}). Confira se é isso mesmo ou aplique uma mecânica padrão.`;
+  return null;
+}
