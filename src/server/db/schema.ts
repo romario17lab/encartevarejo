@@ -28,6 +28,11 @@ export const plans = pgTable("plans", {
     videoMinutesPerMonth: number; aiCreditsPerMonth: number; features: string[];
   }>().notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  /** valor mensal em centavos; null = ainda não definido (valores comerciais definidos pelo dono, não no código) */
+  priceCents: integer("price_cents"),
+  /** id do preço no provedor de pagamento (modo de testes ou produção), configurado na administração */
+  providerPriceId: text("provider_price_id"),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: createdAt(),
 });
 
@@ -69,6 +74,8 @@ export const organizations = pgTable("organizations", {
   planId: text("plan_id").notNull().references(() => plans.id),
   settings: jsonb("settings").$type<{ minMarginBp?: number | null; requireApproval?: boolean }>().notNull().default({}),
   isDemo: boolean("is_demo").notNull().default(false),
+  /** suspensão pela administração da plataforma (motivo em admin_audit_log) */
+  suspendedAt: ts("suspended_at"),
   deletedAt: ts("deleted_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -347,3 +354,71 @@ export const emailOutbox = pgTable("email_outbox", {
   createdAt: createdAt(),
   sentAt: ts("sent_at"),
 }, (t) => [index("email_outbox_created_idx").on(t.createdAt)]);
+
+// ---------------- Assinatura e cobrança (Etapa 4) ----------------
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["teste", "ativa", "inadimplente", "cancelada", "encerrada"]);
+
+/** Assinatura da conta. Uma linha por conta (a vigente). provider "manual" = gerida pela administração, sem gateway. */
+export const subscriptions = pgTable("subscriptions", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  planId: text("plan_id").notNull().references(() => plans.id),
+  provider: text("provider").$type<"manual" | "stripe">().notNull().default("manual"),
+  providerCustomerId: text("provider_customer_id"),
+  providerSubscriptionId: text("provider_subscription_id"),
+  status: subscriptionStatusEnum("status").notNull().default("teste"),
+  /** true = ambiente de testes do provedor */
+  testMode: boolean("test_mode").notNull().default(true),
+  currentPeriodEnd: ts("current_period_end"),
+  trialEndsAt: ts("trial_ends_at"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  /** fim da carência após falha de pagamento; depois disso a conta fica só leitura */
+  graceUntil: ts("grace_until"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [uniqueIndex("subscriptions_org_uq").on(t.orgId), index("subscriptions_provider_idx").on(t.providerSubscriptionId)]);
+
+/** Eventos de cobrança recebidos (webhooks) ou gerados (ações manuais). Unicidade por (provider, provider_event_id) garante idempotência. */
+export const billingEvents = pgTable("billing_events", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id"),
+  provider: text("provider").notNull(),
+  providerEventId: text("provider_event_id").notNull(),
+  type: text("type").notNull(),
+  testMode: boolean("test_mode").notNull().default(true),
+  /** resumo sem dados sensíveis (nunca número de cartão nem dados pessoais desnecessários) */
+  summary: jsonb("summary").$type<Record<string, unknown>>().notNull().default({}),
+  status: text("status").$type<"processado" | "ignorado" | "falhou">().notNull().default("processado"),
+  error: text("error"),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("billing_events_provider_uq").on(t.provider, t.providerEventId), index("billing_events_org_idx").on(t.orgId, t.createdAt)]);
+
+/** Consumo de recursos pagos (IA, vídeo, armazenamento extra) para limites e acompanhamento. */
+export const usageEvents = pgTable("usage_events", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  orgId: text("org_id").notNull(),
+  kind: text("kind").$type<"ai_credit" | "video_second" | "export">().notNull(),
+  quantity: integer("quantity").notNull(),
+  ref: text("ref"),
+  createdAt: createdAt(),
+}, (t) => [index("usage_events_org_idx").on(t.orgId, t.kind, t.createdAt)]);
+
+/** Registro de ações da administração da plataforma (separado do audit_log das contas). */
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  adminUserId: text("admin_user_id").notNull(),
+  action: text("action").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id"),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: createdAt(),
+}, (t) => [index("admin_audit_created_idx").on(t.createdAt)]);
+
+/** Configuração dos modelos pela administração: categoria exibida, ativo na galeria, ordem. Código do modelo fica em src/templates. */
+export const templateSettings = pgTable("template_settings", {
+  templateId: text("template_id").primaryKey(),
+  category: text("category"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedAt: updatedAt(),
+});

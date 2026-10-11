@@ -15,6 +15,13 @@
       "when": 1791681978394,
       "tag": "0001_email_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791718769641,
+      "tag": "0002_etapa4_cobranca_admin",
+      "breakpoints": true
     }
   ]
 }
