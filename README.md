@@ -70,6 +70,32 @@ Nada foi publicado. Para colocar no ar:
 
 Serviços pagos só devem ser contratados com autorização do responsável.
 
+## Cobrança
+
+Etapa 4 = **cobrança em testes**. Nenhuma cobrança real é feita e nada foi configurado em produção.
+
+**Como funciona**
+
+- Planos: Inicial, Profissional e Redes e Agências, com limites de lojas, usuários, armazenamento, exportações por mês, créditos de IA e minutos de vídeo (sempre finitos). Valores comerciais não estão no código: plano sem preço aparece como "Valor a definir" e não pode ser assinado. Preço (`price_cents`) e id do preço no Stripe (`provider_price_id`) são definidos na administração da plataforma.
+- Provedor `manual` (padrão, sem credenciais): a equipe de suporte ajusta plano e situação da conta (`setManualSubscription` em `src/server/services/subscriptions.ts`). Provedor `stripe`: só fica ativo com `STRIPE_SECRET_KEY` de **testes** (`sk_test_`) e `STRIPE_WEBHOOK_SECRET`. Chaves `sk_live_` são recusadas.
+- Ciclo da assinatura: **teste** (14 dias, `BILLING_TRIAL_DAYS`) → **ativa** → **inadimplente** (falha de pagamento; carência de 7 dias, `BILLING_GRACE_DAYS`) → **cancelada** (cancelamento agendado para o fim do período pago) → **encerrada**.
+- Conta **somente leitura** quando: assinatura encerrada; inadimplente depois da carência; cancelada depois do fim do período; reembolso total; conta suspensa; ou teste vencido *com pagamento online configurado* (sem provedor, o teste vencido não bloqueia e o suporte ativa o plano). Nesse estado as escritas respondem `402` com o código `subscription_inactive`; continuam liberados consultar, exportar e excluir os dados da conta, entrar/sair e a área de cobrança. Um pagamento confirmado depois restaura o acesso.
+- Reembolso: total encerra o acesso na hora (o cancelamento da assinatura no Stripe deve ser feito pelo painel do Stripe ou pelo portal); parcial só é registrado.
+- Webhooks: assinatura `Stripe-Signature` validada (HMAC-SHA256, tolerância de 5 minutos), idempotentes (um registro por evento em `billing_events`) e seguros fora de ordem (evento mais antigo que o último aplicado é ignorado). Guardamos só resumos sem dados pessoais nem de cartão.
+- Tela: **Conta › Plano e cobrança** (`/app/conta/plano`).
+
+**O que o dono precisa fazer para testar com o Stripe (modo de testes)**
+
+1. Criar uma conta no Stripe e deixar o painel em **modo de teste** (chave "Test mode" ligada). Não ative pagamentos reais.
+2. Em Produtos, criar um produto por plano (Inicial, Profissional, Redes e Agências) com um **preço recorrente mensal em BRL**. Copiar o id de cada preço (`price_...`).
+3. Na administração da plataforma, informar o valor (`price_cents`) e o id do preço (`provider_price_id`) de cada plano.
+4. Em Desenvolvedores › Chaves de API, copiar a chave secreta de teste (`sk_test_...`) para `STRIPE_SECRET_KEY` no `.env` do servidor (nunca no repositório).
+5. Cadastrar o webhook apontando para `https://SEU_DOMINIO/api/billing/webhook/stripe` com os eventos `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed` e `charge.refunded`; copiar o segredo (`whsec_...`) para `STRIPE_WEBHOOK_SECRET`. Em ambiente local, use o Stripe CLI: `stripe listen --forward-to localhost:3000/api/billing/webhook/stripe` (ele mostra o `whsec_` a usar).
+6. Ativar o portal do cliente em Configurações › Faturamento › Portal do cliente (para "Gerenciar pagamento" e troca de plano).
+7. Reiniciar a aplicação e testar com os cartões de teste do Stripe (ex.: `4242 4242 4242 4242` aprovado; `4000 0000 0000 0341` falha na renovação), ou disparar eventos com `stripe trigger invoice.payment_failed`.
+
+**Verificação feita até aqui:** os testes automatizados (`tests/server/billing.test.ts`) usam eventos assinados localmente com o mesmo algoritmo do Stripe e uma API simulada. A integração **ainda não foi testada contra os servidores do Stripe**, porque não há credenciais de teste; esse é o passo 7 acima.
+
 ## Backup e recuperação
 
 - Banco: `pg_dump -Fc "$DATABASE_URL" > backup.dump`; restaurar com `pg_restore -d <novo_banco> backup.dump` e depois `npm run db:migrate`.
@@ -94,7 +120,7 @@ docs/             pesquisa, arquitetura, design e validação
 ## Pendências e dependências externas
 
 - Vitrine pública (página, QR code, lista de interesse para WhatsApp), métricas e compartilhamento: Etapa 3.
-- Cobrança real: exige escolher um provedor de pagamento e contas de teste (Etapa 4).
+- Cobrança: integração com o Stripe em modo de testes pronta, sem credenciais configuradas (veja Cobrança). Cobrança real exige autorização do dono, chaves de produção e revisão.
 - Envio de e-mail real: exige SMTP.
 - Vídeos, IA (extração de listas, remoção de fundo), TV e modo agência: Etapa 5; IA e narração dependem de serviços contratados.
 - Busca por código de barras: exige uma fonte de dados real integrada.

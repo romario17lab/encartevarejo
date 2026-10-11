@@ -1,6 +1,6 @@
 import type { NextRequest, NextResponse } from "next/server";
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
-import type { TenantCtx, UserCtx } from "../context";
+import { assertOrgNotSuspended, type TenantCtx, type UserCtx } from "../context";
 import { AppError } from "../errors";
 import { getDb, schema } from "../db";
 import { randomToken, sha256 } from "../signing";
@@ -127,6 +127,7 @@ export async function getTenantCtx(req?: NextRequest): Promise<TenantCtx> {
     if (!m) throw new AppError("forbidden", "Você não participa de nenhuma conta ativa.");
     await getDb().update(schema.sessions).set({ activeOrgId: orgId }).where(eq(schema.sessions.id, s.sessionId));
   }
+  await assertOrgNotSuspended(orgId!, req); // conta suspensa pela administração → 403 account_suspended
   return { userId: s.user.userId, orgId: orgId!, role: m.role, storeIds: m.storeIds ?? null, isPlatformAdmin: s.user.isPlatformAdmin };
 }
 
