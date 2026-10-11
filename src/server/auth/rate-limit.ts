@@ -8,8 +8,11 @@ const buckets = new Map<string, Bucket>();
 
 export function clientIp(req?: Request | NextRequest | null): string {
   if (!req) return "local";
+  // Cabeçalhos de IP só são confiáveis atrás de um proxy conhecido (TRUST_PROXY=1);
+  // caso contrário qualquer cliente poderia forjá-los para escapar do limite.
+  if (process.env.TRUST_PROXY !== "1") return "direct";
   const xf = req.headers.get("x-forwarded-for");
-  if (xf) return xf.split(",")[0]!.trim();
+  if (xf) return xf.split(",").at(-1)!.trim();
   return req.headers.get("x-real-ip") ?? "local";
 }
 
