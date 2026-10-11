@@ -61,7 +61,8 @@ Atenção: no Hobby o volume vai até 5 GB. Fotos, exportações e vídeos ocupa
    - opcionais: chaves do Stripe (modo de testes), `ANTHROPIC_API_KEY`, `REMOVEBG_API_KEY`, `GOOGLE_TTS_API_KEY` (lista completa em `.env.example`)
 6. Aba **Settings → Networking → Generate Domain** (ou ligar o domínio próprio).
 7. Esperar o primeiro deploy terminar e abrir o endereço.
-8. Criar a conta do dono pelo cadastro normal e dar acesso à administração da plataforma: no serviço, abrir o terminal (ou `railway run`) e rodar `npm run admin:grant -- email-do-dono`.
+8. Criar a conta do dono pelo cadastro normal no site. Depois, nas variáveis da aplicação, criar `PLATFORM_ADMIN_EMAIL` = e-mail do dono: o Railway publica de novo e, ao iniciar, essa conta passa a acessar `/admin`. (Alternativa por terminal: `npm run admin:grant -- email-do-dono`.)
+   No Railway, a porta do endereço público (Networking) deve ser a mesma em que a aplicação sobe, normalmente **8080**, a porta que o próprio Railway define.
 9. Em **Usage → Limits**, definir um limite de gasto mensal.
 
 Observação técnica: `APP_URL` e `NEXT_PUBLIC_BRAND_NAME` também são usados na construção da imagem (o Railway repassa as variáveis do serviço ao Dockerfile). Ao trocar o endereço ou a marca, faça um novo deploy.
